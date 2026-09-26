@@ -11,6 +11,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -38,6 +39,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -87,7 +89,7 @@ class MainActivity : ComponentActivity() {
             override fun <T : ViewModel> create(modelClass: Class<T>) = CaptureViewModel(database.captures()) as T
         })[CaptureViewModel::class.java]
         enableEdgeToEdge()
-        setContent { MaterialTheme { HopNoteApp(viewModel) } }
+        setContent { HopNoteTheme { HopNoteApp(viewModel) } }
     }
 }
 
@@ -131,19 +133,21 @@ private fun HopNoteScreen(viewModel: CaptureViewModel, onSettings: () -> Unit) {
 
     Column(Modifier.fillMaxSize().padding(top = 24.dp)) {
         TopAppBar(
-            title = { Column { Text("HopNote", fontWeight = FontWeight.Bold); Text("Capturer d'abord", style = MaterialTheme.typography.labelMedium) } },
-            actions = { IconButton(onClick = onSettings) { Icon(Icons.Default.Settings, "Réglages") } }
+            title = { Column { Text("HOPNOTE", fontWeight = FontWeight.Bold); Text("CAPTURER D'ABORD //", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary) } },
+            actions = { IconButton(onClick = onSettings) { Icon(Icons.Default.Settings, "Réglages", tint = MaterialTheme.colorScheme.secondary) } },
+            colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
         )
         Column(Modifier.padding(horizontal = 20.dp)) {
-            Text("Une idée ? Garde-la.", style = MaterialTheme.typography.headlineSmall)
+            Text("UNE IDÉE ?", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
+            Text("Capture-la avant qu'elle disparaisse.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(12.dp))
-            Row(Modifier.fillMaxWidth()) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(value = text, onValueChange = { text = it }, modifier = Modifier.weight(1f).focusRequester(focusRequester), placeholder = { Text("Écrire une pensée…") }, minLines = 2, maxLines = 4)
                 Spacer(Modifier.width(8.dp))
                 FilledIconButton(modifier = Modifier.size(64.dp), onClick = {
                     if (context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) speech.launch(voiceIntent())
                     else permission.launch(Manifest.permission.RECORD_AUDIO)
-                }) { Icon(Icons.Default.Mic, "Dicter et enregistrer") }
+                }) { Icon(Icons.Default.Mic, "Dicter et enregistrer", tint = MaterialTheme.colorScheme.onPrimary) }
             }
             voiceError?.let { Text(it, modifier = Modifier.padding(top = 8.dp), color = MaterialTheme.colorScheme.error) }
             recentCapture?.let { capture ->
@@ -155,7 +159,7 @@ private fun HopNoteScreen(viewModel: CaptureViewModel, onSettings: () -> Unit) {
             Button(onClick = { viewModel.save(text, CaptureSource.TEXT) { recentCapture = it }; text = ""; focusRequester.requestFocus(); keyboard?.show() }, modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp), enabled = text.trim().isNotEmpty()) {
                 Icon(Icons.AutoMirrored.Filled.Send, null); Spacer(Modifier.width(8.dp)); Text("Garder")
             }
-            Text("Mes captures", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
+            Text("SIGNAL CAPTURÉ", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.secondary, modifier = Modifier.padding(top = 8.dp))
         }
         if (captures.isEmpty()) Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center) {
             Text("Encore vide.", style = MaterialTheme.typography.titleLarge)
@@ -171,8 +175,9 @@ private fun HopNoteScreen(viewModel: CaptureViewModel, onSettings: () -> Unit) {
 private fun SettingsScreen(onBack: () -> Unit) {
     Column(Modifier.fillMaxSize().padding(top = 24.dp)) {
         TopAppBar(
-            title = { Text("Réglages") },
-            navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Retour") } }
+            title = { Text("RÉGLAGES") },
+            navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Retour", tint = MaterialTheme.colorScheme.secondary) } },
+            colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
         )
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Connexions", style = MaterialTheme.typography.headlineSmall)
