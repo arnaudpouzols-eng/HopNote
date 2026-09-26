@@ -401,10 +401,11 @@ private fun ConnectionCard(name: String, description: String, status: String, co
         connected?.let { Box(Modifier.size(10.dp).background(if (it) androidx.compose.ui.graphics.Color(0xFF32D583) else MaterialTheme.colorScheme.error, androidx.compose.foundation.shape.CircleShape)) }
         secondaryAction?.let {
             Spacer(Modifier.height(8.dp))
-            Button(
-                onClick = it.second,
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error, contentColor = MaterialTheme.colorScheme.onError)
-            ) { Text(it.first) }
+            Box(
+                Modifier.background(MaterialTheme.colorScheme.error, androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
+                    .clickable { it.second() }
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
+            ) { Text(it.first, color = MaterialTheme.colorScheme.onError, style = MaterialTheme.typography.labelSmall) }
         }
     }
     }
