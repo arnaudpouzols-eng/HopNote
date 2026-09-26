@@ -392,15 +392,21 @@ private fun ConnectionCard(name: String, description: String, status: String, co
     if (onClick == null) Modifier.fillMaxWidth() else Modifier.fillMaxWidth().clickable { onClick() }
 ) {
     Box(Modifier.fillMaxWidth()) {
-    Column(Modifier.padding(12.dp)) {
+    Column(Modifier.padding(start = 12.dp, top = 12.dp, end = if (secondaryAction != null) 122.dp else 12.dp, bottom = 12.dp)) {
         Text(name, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
         Text(description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Row(Modifier.fillMaxWidth().padding(top = 5.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(status, color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
-            secondaryAction?.let { Text(it.first, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelMedium, modifier = Modifier.clickable { it.second() }.padding(8.dp)) }
+        if (status.isNotBlank()) Text(status, color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 5.dp))
+    }
+    if (connected != null || secondaryAction != null) Column(Modifier.align(Alignment.TopEnd).padding(10.dp), horizontalAlignment = Alignment.End) {
+        connected?.let { Box(Modifier.size(10.dp).background(if (it) androidx.compose.ui.graphics.Color(0xFF32D583) else MaterialTheme.colorScheme.error, androidx.compose.foundation.shape.CircleShape)) }
+        secondaryAction?.let {
+            Spacer(Modifier.height(8.dp))
+            Button(
+                onClick = it.second,
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error, contentColor = MaterialTheme.colorScheme.onError)
+            ) { Text(it.first) }
         }
     }
-    connected?.let { Box(Modifier.align(Alignment.TopEnd).padding(12.dp).size(10.dp).background(if (it) androidx.compose.ui.graphics.Color(0xFF32D583) else MaterialTheme.colorScheme.error, androidx.compose.foundation.shape.CircleShape)) }
     }
 }
 
