@@ -1,7 +1,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.INTERNET" />
-    <application android:allowBackup="true" android:icon="@drawable/ic_hopnote" android:label="HopNote" android:roundIcon="@drawable/ic_hopnote" android:theme="@style/Theme.HopNote">
+    <application android:allowBackup="false" android:icon="@drawable/ic_hopnote" android:label="HopNote" android:roundIcon="@drawable/ic_hopnote" android:theme="@style/Theme.HopNote">
         <receiver android:name=".CaptureWidgetProvider" android:exported="true" android:label="Capture vocale HopNote"><intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter><meta-data android:name="android.appwidget.provider" android:resource="@xml/capture_widget_info" /></receiver>
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>

@@ -237,6 +237,8 @@ private fun SettingsScreen(viewModel: CaptureViewModel, theme: AppTheme, onTheme
     var googleEmail by remember { mutableStateOf(google.email()) }
     val notionSession = remember { HopNoteSession(context) }
     var notionConnected by remember { mutableStateOf(false) }
+    var notionError by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) { notionConnected = HopNoteApi.connected(notionSession) }
     val googleLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         GoogleSignIn.getSignedInAccountFromIntent(result.data).result?.email?.let { google.save(it); googleEmail = it }
@@ -249,7 +251,7 @@ private fun SettingsScreen(viewModel: CaptureViewModel, theme: AppTheme, onTheme
         )
         Column(Modifier.padding(20.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("Connexions", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
-            ConnectionCard("Compte Google", googleEmail ?: "Connexion du compte", if (googleEmail != null) "Connecté" else "Connecter", googleEmail != null) {
+            ConnectionCard("Compte Google", googleEmail ?: "Compte de l’appareil", if (googleEmail != null) "Connecté" else "Connecter", googleEmail != null) {
                 val options = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
                     .requestEmail()
                     .requestIdToken("921418049789-ier4iualalt27prl0mrutlasvu82ipfk.apps.googleusercontent.com")
@@ -257,6 +259,17 @@ private fun SettingsScreen(viewModel: CaptureViewModel, theme: AppTheme, onTheme
                 googleLauncher.launch(GoogleSignIn.getClient(context, options).signInIntent)
             }
             ConnectionCard("Compte Notion", "Synchronisation vers HopNote", if (notionConnected) "Connecté" else "Connecter", notionConnected, onNotionSetup)
+            if (notionConnected) OutlinedButton(
+                onClick = {
+                    scope.launch {
+                        HopNoteApi.disconnect(notionSession)
+                            .onSuccess { notionSession.clear(); notionConnected = false; notionError = null }
+                            .onFailure { notionError = "Impossible de déconnecter Notion." }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) { Text("Déconnecter Notion") }
+            notionError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             Spacer(Modifier.height(8.dp))
             Text("Mémoire locale", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
             Text("Nettoyage local uniquement.", color = MaterialTheme.colorScheme.onSurfaceVariant)

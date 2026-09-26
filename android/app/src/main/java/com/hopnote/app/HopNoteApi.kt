@@ -29,6 +29,16 @@ object HopNoteApi {
         val token = session.token() ?: error("Notion non connecté")
         request("POST", "/v1/captures", token, JSONObject().put("text", capture.text).put("source", capture.source.name).put("createdAt", capture.createdAt)).optString("notionBlockId")
     }
+    suspend fun disconnect(session: HopNoteSession): Result<Unit> = runCatching {
+        val token = session.token() ?: return@runCatching
+        withContext(Dispatchers.IO) {
+            val connection = (URL("$BASE/v1/notion").openConnection() as HttpURLConnection).apply {
+                requestMethod = "DELETE"
+                setRequestProperty("Authorization", "Bearer $token")
+            }
+            if (connection.responseCode !in 200..299) error("Déconnexion impossible")
+        }
+    }
     private suspend fun createSession() = withContext(Dispatchers.IO) {
         val c = (URL("$BASE/v1/devices").openConnection() as HttpURLConnection).apply { requestMethod = "POST" }
         JSONObject(c.inputStream.bufferedReader().use { it.readText() }).getString("sessionToken")

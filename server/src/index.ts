@@ -10,8 +10,16 @@ type NotionTokenResponse = { access_token: string }
 
 const encoder = new TextEncoder()
 
+const securityHeaders = {
+  "Cache-Control": "no-store",
+  "X-Content-Type-Options": "nosniff",
+  "Referrer-Policy": "no-referrer",
+  "X-Frame-Options": "DENY",
+  "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'"
+}
+
 const json = (data: unknown, status = 200) =>
-  new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } })
+  new Response(JSON.stringify(data), { status, headers: { ...securityHeaders, "Content-Type": "application/json" } })
 
 const random = () => crypto.randomUUID().replaceAll("-", "") + crypto.randomUUID().replaceAll("-", "")
 
@@ -55,6 +63,20 @@ async function deviceId(request: Request, env: Env) {
   return (await env.DB.prepare("SELECT id FROM device_sessions WHERE token_hash = ?").bind(tokenHash).first<{ id: string }>())?.id ?? null
 }
 
+async function deviceCreationAllowed(request: Request, env: Env) {
+  const now = Date.now()
+  const windowStartedAt = now - 60 * 60 * 1000
+  const client = request.headers.get("CF-Connecting-IP") ?? "unknown"
+  const key = await sha256(`device:${client}`)
+  await env.DB.prepare(`INSERT INTO request_limits (key, count, window_started_at) VALUES (?, 1, ?)
+    ON CONFLICT(key) DO UPDATE SET
+      count = CASE WHEN window_started_at <= ? THEN 1 ELSE count + 1 END,
+      window_started_at = CASE WHEN window_started_at <= ? THEN ? ELSE window_started_at END`)
+    .bind(key, now, windowStartedAt, windowStartedAt, now).run()
+  const limit = await env.DB.prepare("SELECT count FROM request_limits WHERE key = ?").bind(key).first<{ count: number }>()
+  return (limit?.count ?? 0) <= 20
+}
+
 async function notionRequest(accessToken: string, path: string, init: RequestInit = {}) {
   return fetch(`https://api.notion.com${path}`, {
     ...init,
@@ -73,6 +95,7 @@ export default {
     if (request.method === "GET" && url.pathname === "/health") return json({ ok: true })
 
     if (request.method === "POST" && url.pathname === "/v1/devices") {
+      if (!await deviceCreationAllowed(request, env)) return json({ error: "Too many requests" }, 429)
       const id = crypto.randomUUID()
       const token = random()
       await env.DB.prepare("INSERT INTO device_sessions (id, token_hash, created_at) VALUES (?, ?, ?)")
@@ -116,7 +139,7 @@ export default {
         VALUES (?, ?, ?, ?, ?)
         ON CONFLICT(device_id) DO UPDATE SET encrypted_access_token = excluded.encrypted_access_token, hopnote_page_id = excluded.hopnote_page_id, updated_at = excluded.updated_at`)
         .bind(pending.device_id, await encrypt(env, token), pageId, Date.now(), Date.now()).run()
-      return new Response(`<!doctype html><html lang="fr"><meta name="viewport" content="width=device-width,initial-scale=1"><title>HopNote connecté</title><body style="margin:0;background:#090a12;color:#f6f1ff;font-family:system-ui;display:grid;min-height:100vh;place-items:center;text-align:center"><main><div style="font-size:46px">💭</div><h1 style="margin:14px 0 8px">Notion est connecté</h1><p style="margin:0;color:#c8c5d6">Ta page HopNote est prête.</p><p style="margin:26px 0 0;color:#3d7bff">Tu peux revenir dans l’application.</p></main></body></html>`, { headers: { "Content-Type": "text/html; charset=UTF-8", "Cache-Control": "no-store" } })
+      return new Response(`<!doctype html><html lang="fr"><meta name="viewport" content="width=device-width,initial-scale=1"><title>HopNote connecté</title><body style="margin:0;background:#090a12;color:#f6f1ff;font-family:system-ui;display:grid;min-height:100vh;place-items:center;text-align:center"><main><div style="font-size:46px">💭</div><h1 style="margin:14px 0 8px">Notion est connecté</h1><p style="margin:0;color:#c8c5d6">Ta page HopNote est prête.</p><p style="margin:26px 0 0;color:#3d7bff">Tu peux revenir dans l’application.</p></main></body></html>`, { headers: { ...securityHeaders, "Content-Type": "text/html; charset=UTF-8" } })
     }
 
     const id = await deviceId(request, env)
@@ -144,7 +167,7 @@ export default {
 
     if (request.method === "DELETE" && url.pathname === "/v1/notion") {
       await env.DB.prepare("DELETE FROM notion_connections WHERE device_id = ?").bind(id).run()
-      return new Response(null, { status: 204 })
+      return new Response(null, { status: 204, headers: securityHeaders })
     }
 
     if (request.method === "POST" && url.pathname === "/v1/captures") {
