@@ -170,14 +170,11 @@ private fun HopNoteScreen(viewModel: CaptureViewModel, onSettings: () -> Unit) {
 
     Column(Modifier.fillMaxSize().padding(top = 24.dp)) {
         TopAppBar(
-            title = { Column { Text("HOPNOTE", fontWeight = FontWeight.Bold); Text("CAPTURER D'ABORD //", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary) } },
+            title = { Text("HopNote", fontWeight = FontWeight.Bold) },
             actions = { IconButton(onClick = onSettings) { Icon(Icons.Default.Settings, "Réglages", tint = MaterialTheme.colorScheme.secondary) } },
             colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
         )
         Column(Modifier.padding(horizontal = 20.dp)) {
-            Text("UNE IDÉE ?", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
-            Text("Capture-la avant qu'elle disparaisse.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(12.dp))
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(value = text, onValueChange = { text = it }, modifier = Modifier.weight(1f).focusRequester(focusRequester), placeholder = { Text("Écrire une pensée…") }, minLines = 2, maxLines = 4)
                 Spacer(Modifier.width(8.dp))
@@ -196,11 +193,9 @@ private fun HopNoteScreen(viewModel: CaptureViewModel, onSettings: () -> Unit) {
             Button(onClick = { viewModel.save(text, CaptureSource.TEXT) { recentCapture = it }; text = ""; focusRequester.requestFocus(); keyboard?.show() }, modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp), enabled = text.trim().isNotEmpty()) {
                 Icon(Icons.AutoMirrored.Filled.Send, null); Spacer(Modifier.width(8.dp)); Text("Garder")
             }
-            Text("SIGNAL CAPTURÉ", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.secondary, modifier = Modifier.padding(top = 8.dp))
         }
         if (captures.isEmpty()) Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center) {
-            Text("Encore vide.", style = MaterialTheme.typography.titleLarge)
-            Text("Écris ou dicte la première pensée qui passe.")
+            Text("Aucune capture.", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         } else LazyColumn(Modifier.fillMaxSize().padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(captures, key = { it.id }) { CaptureCard(it) }
         }
