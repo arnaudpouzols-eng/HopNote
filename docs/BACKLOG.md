@@ -71,3 +71,12 @@ Principe directeur : **une idée arrive → HopNote la garde**. L'organisation n
 - [ ] Compte Google et sauvegarde multi-appareils
 - [ ] Firebase / Firestore si le besoin de restauration apparaît
 - [ ] Interface Web Next.js / Vercel si la consultation sur PC devient utile
+# v0.3 — Connexion Notion simplifiée (en cours)
+
+- [x] Fondations Worker Cloudflare + D1, sans stockage durable des captures
+- [x] Flux OAuth Notion sécurisé par état temporaire
+- [x] Chiffrement AES-GCM des jetons Notion dans D1
+- [ ] Déployer le Worker sur le compte Cloudflare HopNote
+- [ ] Relier l'app Android au parcours OAuth
+- [ ] Créer automatiquement la page `HopNote` après la connexion
+- [ ] Ajouter une suppression de connexion et des limites anti-abus

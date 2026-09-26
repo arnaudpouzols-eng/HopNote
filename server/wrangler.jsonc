@@ -1,0 +1,8 @@
+{
+  "name": "hopnote-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-26",
+  "d1_databases": [
+    { "binding": "DB", "database_name": "hopnote", "database_id": "REPLACE_AFTER_D1_CREATION" }
+  ]
+}

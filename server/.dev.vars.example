@@ -1,0 +1,5 @@
+NOTION_CLIENT_ID=
+NOTION_CLIENT_SECRET=
+PUBLIC_BASE_URL=http://localhost:8787
+# 32 bytes, encoded in base64url. Generate once; do not commit the generated value.
+TOKEN_ENCRYPTION_KEY=

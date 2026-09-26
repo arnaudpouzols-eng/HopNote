@@ -31,3 +31,6 @@ La reconnaissance vocale dépend des services installés sur l'appareil. La capt
 ## Versions
 
 La stratégie de versions et le backlog sont dans [docs/VERSIONS.md](docs/VERSIONS.md) et [docs/BACKLOG.md](docs/BACKLOG.md).
+# Serveur de connexion Notion
+
+La v1 utilisera un serveur Cloudflare minimal afin que la connexion Notion soit un bouton, et non une procédure avec token. Sa fondation se trouve dans [`server`](server) ; son installation est décrite dans [`docs/SERVER_SETUP.md`](docs/SERVER_SETUP.md).
