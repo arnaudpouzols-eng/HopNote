@@ -103,6 +103,7 @@ export default {
           method: "POST",
           body: JSON.stringify({
             parent: { type: "workspace", workspace: true },
+            icon: { type: "emoji", emoji: "💭" },
             properties: {
               title: { title: [{ type: "text", text: { content: "HopNote" } }] }
             }
@@ -111,11 +112,11 @@ export default {
         if (!pageResponse.ok) return new Response("HopNote n'a pas pu créer sa page Notion.", { status: 502 })
         pageId = (await pageResponse.json() as { id: string }).id
       }
-      await env.DB.prepare(`INSERT INTO notion_connections (device_id, encrypted_access_token, created_at, updated_at)
+      await env.DB.prepare(`INSERT INTO notion_connections (device_id, encrypted_access_token, hopnote_page_id, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?)
         ON CONFLICT(device_id) DO UPDATE SET encrypted_access_token = excluded.encrypted_access_token, hopnote_page_id = excluded.hopnote_page_id, updated_at = excluded.updated_at`)
         .bind(pending.device_id, await encrypt(env, token), pageId, Date.now(), Date.now()).run()
-      return new Response("Notion est connecté. Tu peux revenir dans HopNote.", { headers: { "Content-Type": "text/plain; charset=UTF-8" } })
+      return new Response(`<!doctype html><html lang="fr"><meta name="viewport" content="width=device-width,initial-scale=1"><title>HopNote connecté</title><body style="margin:0;background:#090a12;color:#f6f1ff;font-family:system-ui;display:grid;min-height:100vh;place-items:center;text-align:center"><main><div style="font-size:46px">💭</div><h1 style="margin:14px 0 8px">Notion est connecté</h1><p style="margin:0;color:#c8c5d6">Ta page HopNote est prête.</p><p style="margin:26px 0 0;color:#3d7bff">Tu peux revenir dans l’application.</p></main></body></html>`, { headers: { "Content-Type": "text/html; charset=UTF-8", "Cache-Control": "no-store" } })
     }
 
     const id = await deviceId(request, env)
@@ -152,9 +153,10 @@ export default {
       if (!text || text.length > 5000) return json({ error: "Invalid capture" }, 400)
       const connection = await env.DB.prepare("SELECT encrypted_access_token, hopnote_page_id FROM notion_connections WHERE device_id = ?").bind(id).first<{ encrypted_access_token: string, hopnote_page_id: string | null }>()
       if (!connection?.hopnote_page_id) return json({ error: "Notion is not ready" }, 409)
+      const capturedAt = new Intl.DateTimeFormat("fr-FR", { dateStyle: "short", timeStyle: "short", timeZone: "Europe/Paris" }).format(new Date(body.createdAt ?? Date.now()))
       const response = await notionRequest(await decrypt(env, connection.encrypted_access_token), `/v1/blocks/${connection.hopnote_page_id}/children`, {
         method: "PATCH",
-        body: JSON.stringify({ children: [{ object: "block", type: "paragraph", paragraph: { rich_text: [{ type: "text", text: { content: text } }] } }] })
+        body: JSON.stringify({ children: [{ object: "block", type: "paragraph", paragraph: { rich_text: [{ type: "text", text: { content: `${capturedAt} — ${text}` } }] } }] })
       })
       if (!response.ok) return json({ error: "Notion sync failed" }, 502)
       const result = await response.json<{ results?: Array<{ id: string }> }>()

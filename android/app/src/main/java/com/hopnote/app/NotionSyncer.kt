@@ -1,12 +1,11 @@
 package com.hopnote.app
 
-class NotionSyncer(private val dao: CaptureDao, private val preferences: NotionPreferences) {
+class NotionSyncer(private val dao: CaptureDao, private val session: HopNoteSession) {
     suspend fun syncPending() {
-        val connection = preferences.connection() ?: return
-        val pageId = connection.hopNotePageId ?: return
+        if (!HopNoteApi.connected(session)) return
         for (capture in dao.unsynced()) {
             dao.markSyncing(capture.id)
-            NotionClient.appendCapture(connection.copy(hopNotePageId = pageId), capture)
+            HopNoteApi.append(session, capture)
                 .onSuccess { blockId -> dao.markSynced(capture.id, System.currentTimeMillis(), blockId) }
                 .onFailure { dao.markFailed(capture.id) }
         }

@@ -25,12 +25,16 @@ object HopNoteApi {
         request("GET", "/v1/notion/oauth/start", token).getString("authorizationUrl")
     }
     suspend fun connected(session: HopNoteSession) = session.token()?.let { runCatching { request("GET", "/v1/notion/status", it).optBoolean("connected") }.getOrDefault(false) } ?: false
+    suspend fun append(session: HopNoteSession, capture: Capture): Result<String> = runCatching {
+        val token = session.token() ?: error("Notion non connecté")
+        request("POST", "/v1/captures", token, JSONObject().put("text", capture.text).put("source", capture.source.name).put("createdAt", capture.createdAt)).optString("notionBlockId")
+    }
     private suspend fun createSession() = withContext(Dispatchers.IO) {
         val c = (URL("$BASE/v1/devices").openConnection() as HttpURLConnection).apply { requestMethod = "POST" }
         JSONObject(c.inputStream.bufferedReader().use { it.readText() }).getString("sessionToken")
     }
-    private suspend fun request(method: String, path: String, token: String) = withContext(Dispatchers.IO) {
-        val c = (URL("$BASE$path").openConnection() as HttpURLConnection).apply { requestMethod = method; setRequestProperty("Authorization", "Bearer $token") }
+    private suspend fun request(method: String, path: String, token: String, payload: JSONObject? = null) = withContext(Dispatchers.IO) {
+        val c = (URL("$BASE$path").openConnection() as HttpURLConnection).apply { requestMethod = method; setRequestProperty("Authorization", "Bearer $token"); setRequestProperty("Content-Type", "application/json"); if (payload != null) { doOutput = true; outputStream.bufferedWriter().use { it.write(payload.toString()) } } }
         val code = c.responseCode
         val body = (if (code in 200..299) c.inputStream else c.errorStream).bufferedReader().use { it.readText() }
         if (code !in 200..299) throw IllegalStateException("Connexion HopNote impossible")

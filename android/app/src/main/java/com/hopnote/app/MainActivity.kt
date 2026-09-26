@@ -5,6 +5,8 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.speech.RecognizerIntent
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -26,6 +28,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
@@ -56,6 +61,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import android.net.Uri
@@ -100,7 +106,7 @@ class MainActivity : ComponentActivity() {
             .build()
         val viewModel = ViewModelProvider(this, object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
-            override fun <T : ViewModel> create(modelClass: Class<T>) = CaptureViewModel(database.captures(), NotionSyncer(database.captures(), NotionPreferences(applicationContext))) as T
+            override fun <T : ViewModel> create(modelClass: Class<T>) = CaptureViewModel(database.captures(), NotionSyncer(database.captures(), HopNoteSession(applicationContext))) as T
         })[CaptureViewModel::class.java]
         enableEdgeToEdge()
         val preferences = getSharedPreferences("hopnote_preferences", MODE_PRIVATE)
@@ -110,7 +116,7 @@ class MainActivity : ComponentActivity() {
         setContent {
             var theme by remember { mutableStateOf(initialTheme) }
             HopNoteTheme(theme) {
-                HopNoteApp(viewModel, theme) { selected ->
+                HopNoteApp(viewModel, theme, intent.getBooleanExtra(START_VOICE, false)) { selected ->
                     theme = selected
                     preferences.edit().putString("theme", selected.name).apply()
                 }
@@ -118,7 +124,8 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private companion object {
+    companion object {
+        const val START_VOICE = "com.hopnote.app.START_VOICE"
         val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(database: SupportSQLiteDatabase) {
                 database.execSQL("ALTER TABLE captures ADD COLUMN syncedAt INTEGER")
@@ -129,37 +136,45 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-private fun HopNoteApp(viewModel: CaptureViewModel, theme: AppTheme, onThemeChange: (AppTheme) -> Unit) {
+private fun HopNoteApp(viewModel: CaptureViewModel, theme: AppTheme, startVoice: Boolean, onThemeChange: (AppTheme) -> Unit) {
     var showSettings by remember { mutableStateOf(false) }
     var showNotionSetup by remember { mutableStateOf(false) }
-    if (showSettings) SettingsScreen(viewModel, theme, onThemeChange, onNotionSetup = { showNotionSetup = true }, onBack = { showSettings = false })
-    else HopNoteScreen(viewModel, onSettings = { showSettings = true })
+    var showCredits by remember { mutableStateOf(false) }
+    if (showCredits) CreditsScreen(onBack = { showCredits = false })
+    else if (showSettings) SettingsScreen(viewModel, theme, onThemeChange, onNotionSetup = { showNotionSetup = true }, onCredits = { showCredits = true }, onBack = { showSettings = false })
+    else HopNoteScreen(viewModel, startVoice, onSettings = { showSettings = true })
     if (showNotionSetup) NotionSetupDialog(onConnected = { viewModel.retrySync() }, onDismiss = { showNotionSetup = false })
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun HopNoteScreen(viewModel: CaptureViewModel, onSettings: () -> Unit) {
+private fun HopNoteScreen(viewModel: CaptureViewModel, startVoice: Boolean, onSettings: () -> Unit) {
     var text by remember { mutableStateOf("") }
     var voiceError by remember { mutableStateOf<String?>(null) }
     var recentCapture by remember { mutableStateOf<Capture?>(null) }
+    var scrollToCaptureId by remember { mutableStateOf<String?>(null) }
     val context = LocalContext.current
+    val serverSession = remember { HopNoteSession(context) }
+    var notionReady by remember { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
     val captures by viewModel.captures.collectAsStateWithLifecycle()
+    val captureListState = rememberLazyListState()
     val speech = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val spoken = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
         if (spoken.isNullOrBlank()) voiceError = "Je n'ai pas compris. Réessaie quand tu veux."
-        else viewModel.save(spoken, CaptureSource.VOICE) { recentCapture = it; voiceError = null }
+        else viewModel.save(spoken, CaptureSource.VOICE) { recentCapture = it; scrollToCaptureId = it.id; voiceError = null }
     }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) speech.launch(voiceIntent()) else voiceError = "L'accès au micro est nécessaire pour dicter."
     }
 
     LaunchedEffect(Unit) {
+        notionReady = HopNoteApi.connected(serverSession)
         focusRequester.requestFocus()
         keyboard?.show()
     }
+    LaunchedEffect(startVoice) { if (startVoice && context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) speech.launch(voiceIntent()) }
 
     LaunchedEffect(recentCapture?.id) {
         if (recentCapture != null) {
@@ -167,14 +182,26 @@ private fun HopNoteScreen(viewModel: CaptureViewModel, onSettings: () -> Unit) {
             recentCapture = null
         }
     }
+    LaunchedEffect(captures, scrollToCaptureId) {
+        if (scrollToCaptureId != null && captures.any { it.id == scrollToCaptureId }) {
+            captureListState.animateScrollToItem(0)
+            scrollToCaptureId = null
+        }
+    }
 
     Column(Modifier.fillMaxSize().padding(top = 24.dp)) {
         TopAppBar(
-            title = { Text("HopNote", fontWeight = FontWeight.Bold) },
-            actions = { IconButton(onClick = onSettings) { Icon(Icons.Default.Settings, "Réglages", tint = MaterialTheme.colorScheme.secondary) } },
+            title = { Row(verticalAlignment = Alignment.CenterVertically) { Icon(painterResource(R.drawable.ic_hopnote), null, modifier = Modifier.size(28.dp), tint = MaterialTheme.colorScheme.primary); Spacer(Modifier.width(8.dp)); Text("HopNote", fontWeight = FontWeight.Bold) } },
+            actions = {
+                Box(Modifier.size(40.dp), contentAlignment = Alignment.Center) {
+                    Icon(painterResource(R.drawable.ic_notion), "Notion", modifier = Modifier.size(23.dp), tint = androidx.compose.ui.graphics.Color.Unspecified)
+                    Box(Modifier.align(Alignment.BottomEnd).size(9.dp).background(if (notionReady) androidx.compose.ui.graphics.Color(0xFF32D583) else MaterialTheme.colorScheme.error, androidx.compose.foundation.shape.CircleShape))
+                }
+                IconButton(onClick = onSettings) { Icon(Icons.Default.Settings, "Réglages", tint = MaterialTheme.colorScheme.secondary) }
+            },
             colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
         )
-        Column(Modifier.padding(horizontal = 20.dp)) {
+        Column(Modifier.padding(start = 20.dp, top = 10.dp, end = 20.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 OutlinedTextField(value = text, onValueChange = { text = it }, modifier = Modifier.weight(1f).focusRequester(focusRequester), placeholder = { Text("Écrire une pensée…") }, minLines = 2, maxLines = 4)
                 Spacer(Modifier.width(8.dp))
@@ -190,13 +217,13 @@ private fun HopNoteScreen(viewModel: CaptureViewModel, onSettings: () -> Unit) {
                     OutlinedButton(onClick = { viewModel.undo(capture); recentCapture = null }) { Text("Annuler") }
                 }
             }
-            Button(onClick = { viewModel.save(text, CaptureSource.TEXT) { recentCapture = it }; text = ""; focusRequester.requestFocus(); keyboard?.show() }, modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp), enabled = text.trim().isNotEmpty()) {
+            Button(onClick = { viewModel.save(text, CaptureSource.TEXT) { recentCapture = it; scrollToCaptureId = it.id }; text = ""; focusRequester.requestFocus(); keyboard?.show() }, modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp), enabled = text.trim().isNotEmpty()) {
                 Icon(Icons.AutoMirrored.Filled.Send, null); Spacer(Modifier.width(8.dp)); Text("Garder")
             }
         }
         if (captures.isEmpty()) Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center) {
             Text("Aucune capture.", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        } else LazyColumn(Modifier.fillMaxSize().padding(horizontal = 20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        } else LazyColumn(Modifier.fillMaxSize().padding(horizontal = 20.dp), state = captureListState, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(captures, key = { it.id }) { CaptureCard(it) }
         }
     }
@@ -204,27 +231,65 @@ private fun HopNoteScreen(viewModel: CaptureViewModel, onSettings: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SettingsScreen(viewModel: CaptureViewModel, theme: AppTheme, onThemeChange: (AppTheme) -> Unit, onNotionSetup: () -> Unit, onBack: () -> Unit) {
+private fun SettingsScreen(viewModel: CaptureViewModel, theme: AppTheme, onThemeChange: (AppTheme) -> Unit, onNotionSetup: () -> Unit, onCredits: () -> Unit, onBack: () -> Unit) {
+    val context = LocalContext.current
+    val google = remember { GoogleAccount(context) }
+    var googleEmail by remember { mutableStateOf(google.email()) }
+    val notionSession = remember { HopNoteSession(context) }
+    var notionConnected by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { notionConnected = HopNoteApi.connected(notionSession) }
+    val googleLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        GoogleSignIn.getSignedInAccountFromIntent(result.data).result?.email?.let { google.save(it); googleEmail = it }
+    }
     Column(Modifier.fillMaxSize().padding(top = 24.dp)) {
         TopAppBar(
             title = { Text("RÉGLAGES") },
             navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Retour", tint = MaterialTheme.colorScheme.secondary) } },
             colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
         )
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Connexions", style = MaterialTheme.typography.headlineSmall)
-            Text("La capture reste toujours locale et instantanée. Les connexions seront ajoutées sans modifier ce geste.")
-            ConnectionCard("Compte Google", "Sauvegarde de tes captures", "Prévu en v0.2")
-            ConnectionCard("Notion", "Copie unidirectionnelle vers une page HopNote", "Configurer", onNotionSetup)
+        Column(Modifier.padding(20.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Connexions", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
+            ConnectionCard("Compte Google", googleEmail ?: "Connexion du compte", if (googleEmail != null) "Connecté" else "Connecter", googleEmail != null) {
+                val options = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+                    .requestEmail()
+                    .requestIdToken("921418049789-ier4iualalt27prl0mrutlasvu82ipfk.apps.googleusercontent.com")
+                    .build()
+                googleLauncher.launch(GoogleSignIn.getClient(context, options).signInIntent)
+            }
+            ConnectionCard("Compte Notion", "Synchronisation vers HopNote", if (notionConnected) "Connecté" else "Connecter", notionConnected, onNotionSetup)
             Spacer(Modifier.height(8.dp))
-            Text("Mémoire locale", style = MaterialTheme.typography.headlineSmall)
-            Text("Les notes synchronisées depuis plus de 14 jours peuvent être retirées du téléphone. Notion n'est jamais modifié.")
+            Text("Mémoire locale", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
+            Text("Nettoyage local uniquement.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             OutlinedButton(onClick = { viewModel.cleanSynced(14) }, modifier = Modifier.fillMaxWidth()) { Text("Nettoyer les notes synchronisées") }
             Spacer(Modifier.height(8.dp))
-            Text("Thème", style = MaterialTheme.typography.headlineSmall)
+            Text("Thème", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
             ThemeOption(AppTheme.ELECTRIC_BLUE, "Bleu électrique", "Le thème HopNote par défaut", theme, onThemeChange)
             ThemeOption(AppTheme.INDUSTRIAL_AMBER, "Ambre industriel", "Signal chaud et contrasté", theme, onThemeChange)
             ThemeOption(AppTheme.LASER_RED, "Rouge laser", "Signal intense et direct", theme, onThemeChange)
+            ConnectionCard("Crédits", "HopNote v0.2.0 · Créé par Arnaud Pouzols", "Voir", null, onCredits)
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CreditsScreen(onBack: () -> Unit) {
+    val context = LocalContext.current
+    Column(Modifier.fillMaxSize().padding(top = 24.dp)) {
+        TopAppBar(title = { Text("CRÉDITS") }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Retour") } }, colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background))
+        Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("HopNote", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onSurface)
+            Text("Version 0.2.0", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Créé par Arnaud Pouzols", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(12.dp))
+            Text("Si HopNote vous est utile et que vous souhaitez soutenir son développement, vous pouvez laisser un pourboire libre.", color = MaterialTheme.colorScheme.onSurface)
+            Text("C’est totalement facultatif : HopNote reste identique pour tout le monde.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                "Soutenir HopNote sur Tipeee",
+                color = MaterialTheme.colorScheme.secondary,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.clickable { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://fr.tipeee.com/hopnote/"))) }.padding(vertical = 8.dp)
+            )
         }
     }
 }
@@ -237,22 +302,25 @@ private fun ThemeOption(option: AppTheme, name: String, description: String, sel
         Box(Modifier.size(18.dp).background(option.accentColor()))
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
-            Text(name, style = MaterialTheme.typography.titleMedium)
-            Text(description, style = MaterialTheme.typography.bodyMedium)
+            Text(name, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+            Text(description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         RadioButton(selected = selectedTheme == option, onClick = { onThemeChange(option) })
     }
 }
 
 @Composable
-private fun ConnectionCard(name: String, description: String, status: String, onClick: (() -> Unit)? = null) = Card(
+private fun ConnectionCard(name: String, description: String, status: String, connected: Boolean? = null, onClick: (() -> Unit)? = null) = Card(
     if (onClick == null) Modifier.fillMaxWidth() else Modifier.fillMaxWidth().clickable { onClick() }
 ) {
+    Box(Modifier.fillMaxWidth()) {
     Column(Modifier.padding(16.dp)) {
-        Text(name, style = MaterialTheme.typography.titleMedium)
-        Text(description, style = MaterialTheme.typography.bodyMedium)
+        Text(name, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
+        Text(description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(8.dp))
         Text(status, color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.labelMedium)
+    }
+    connected?.let { Box(Modifier.align(Alignment.TopEnd).padding(14.dp).size(10.dp).background(if (it) androidx.compose.ui.graphics.Color(0xFF32D583) else MaterialTheme.colorScheme.error, androidx.compose.foundation.shape.CircleShape)) }
     }
 }
 
