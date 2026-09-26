@@ -57,7 +57,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
+import android.net.Uri
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -264,13 +264,12 @@ private fun ConnectionCard(name: String, description: String, status: String, on
 @Composable
 private fun NotionSetupScreen(onConnected: () -> Unit, onBack: () -> Unit) {
     val context = LocalContext.current
-    val preferences = remember { NotionPreferences(context) }
-    val existing = remember { preferences.connection() }
-    var token by remember { mutableStateOf("") }
-    var pageUrl by remember { mutableStateOf("") }
-    var status by remember { mutableStateOf(existing?.let { "Connecté · page HopNote prête" }) }
+    val session = remember { HopNoteSession(context) }
+    var status by remember { mutableStateOf<String?>(null) }
     var connecting by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+
+    LaunchedEffect(Unit) { if (HopNoteApi.connected(session)) status = "Connecté · page HopNote prête" }
 
     Column(Modifier.fillMaxSize().padding(top = 24.dp)) {
         TopAppBar(
@@ -279,40 +278,28 @@ private fun NotionSetupScreen(onConnected: () -> Unit, onBack: () -> Unit) {
             colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
         )
         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Créer HopNote automatiquement", style = MaterialTheme.typography.headlineSmall)
-            Text("Crée une intégration Notion, partage-lui une page parente une seule fois, puis HopNote créera sa propre page à l'intérieur.")
-            OutlinedTextField(
-                value = token,
-                onValueChange = { token = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Jeton d'intégration Notion") },
-                visualTransformation = PasswordVisualTransformation(),
-                singleLine = true
-            )
-            OutlinedTextField(
-                value = pageUrl,
-                onValueChange = { pageUrl = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Lien de la page parente partagée") },
-                singleLine = true
-            )
+            Text("Connecter Notion", style = MaterialTheme.typography.headlineSmall)
+            Text("Autorise HopNote dans Notion. Une page HopNote privée sera créée automatiquement.")
             Button(
-                enabled = token.isNotBlank() && pageIdFromUrl(pageUrl) != null && !connecting,
+                enabled = !connecting,
                 onClick = {
-                    val parentId = pageIdFromUrl(pageUrl) ?: return@Button
                     connecting = true
-                    status = "Connexion à Notion…"
+                    status = "Ouverture de Notion…"
                     scope.launch {
-                        NotionClient.createOrFindHopNotePage(token.trim(), parentId)
-                            .onSuccess { pageId -> preferences.save(token.trim(), parentId, pageId); onConnected(); status = "Connecté · page HopNote créée" }
+                        HopNoteApi.authorizationUrl(session)
+                            .onSuccess { url -> context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))); status = "Autorise HopNote dans Notion, puis reviens ici." }
                             .onFailure { error -> status = error.message ?: "Connexion impossible" }
                         connecting = false
                     }
                 },
                 modifier = Modifier.fillMaxWidth()
-            ) { Text(if (connecting) "Connexion…" else "Connecter et créer HopNote") }
+            ) { Text(if (connecting) "Connexion…" else "Connecter Notion") }
+            OutlinedButton(onClick = {
+                scope.launch {
+                    status = if (HopNoteApi.connected(session)) { onConnected(); "Connecté · page HopNote prête" } else "Autorisation en attente. Termine-la dans Notion."
+                }
+            }, modifier = Modifier.fillMaxWidth()) { Text("J'ai autorisé HopNote") }
             status?.let { Text(it, color = MaterialTheme.colorScheme.secondary) }
-            existing?.let { OutlinedButton(onClick = { preferences.clear(); status = "Connexion supprimée" }, modifier = Modifier.fillMaxWidth()) { Text("Déconnecter Notion") } }
         }
     }
 }
