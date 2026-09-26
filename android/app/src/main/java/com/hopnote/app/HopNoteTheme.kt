@@ -8,9 +8,9 @@ import androidx.compose.ui.graphics.Color
 private val HopNoteNight = darkColorScheme(
     primary = Color(0xFFB026FF),
     onPrimary = Color(0xFFFFFFFF),
-    secondary = Color(0xFF19E6FF),
-    onSecondary = Color(0xFF001F25),
-    tertiary = Color(0xFFFF4FB8),
+    secondary = Color(0xFFB026FF),
+    onSecondary = Color(0xFFFFFFFF),
+    tertiary = Color(0xFFB026FF),
     background = Color(0xFF090A12),
     onBackground = Color(0xFFF6F1FF),
     surface = Color(0xFF121421),
