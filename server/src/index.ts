@@ -96,10 +96,25 @@ export default {
       })
       if (!response.ok) return new Response("Notion a refusé la connexion. Retourne dans HopNote et réessaie.", { status: 502 })
       const token = (await response.json() as NotionTokenResponse).access_token
+      const existing = await env.DB.prepare("SELECT hopnote_page_id FROM notion_connections WHERE device_id = ?").bind(pending.device_id).first<{ hopnote_page_id: string | null }>()
+      let pageId = existing?.hopnote_page_id
+      if (!pageId) {
+        const pageResponse = await notionRequest(token, "/v1/pages", {
+          method: "POST",
+          body: JSON.stringify({
+            parent: { type: "workspace", workspace: true },
+            properties: {
+              title: { title: [{ type: "text", text: { content: "HopNote" } }] }
+            }
+          })
+        })
+        if (!pageResponse.ok) return new Response("HopNote n'a pas pu créer sa page Notion.", { status: 502 })
+        pageId = (await pageResponse.json() as { id: string }).id
+      }
       await env.DB.prepare(`INSERT INTO notion_connections (device_id, encrypted_access_token, created_at, updated_at)
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT(device_id) DO UPDATE SET encrypted_access_token = excluded.encrypted_access_token, updated_at = excluded.updated_at`)
-        .bind(pending.device_id, await encrypt(env, token), Date.now(), Date.now()).run()
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(device_id) DO UPDATE SET encrypted_access_token = excluded.encrypted_access_token, hopnote_page_id = excluded.hopnote_page_id, updated_at = excluded.updated_at`)
+        .bind(pending.device_id, await encrypt(env, token), pageId, Date.now(), Date.now()).run()
       return new Response("Notion est connecté. Tu peux revenir dans HopNote.", { headers: { "Content-Type": "text/plain; charset=UTF-8" } })
     }
 
@@ -124,6 +139,11 @@ export default {
     if (request.method === "GET" && url.pathname === "/v1/notion/status") {
       const connection = await env.DB.prepare("SELECT hopnote_page_id FROM notion_connections WHERE device_id = ?").bind(id).first<{ hopnote_page_id: string | null }>()
       return json({ connected: Boolean(connection), hopNotePageId: connection?.hopnote_page_id ?? null })
+    }
+
+    if (request.method === "DELETE" && url.pathname === "/v1/notion") {
+      await env.DB.prepare("DELETE FROM notion_connections WHERE device_id = ?").bind(id).run()
+      return new Response(null, { status: 204 })
     }
 
     if (request.method === "POST" && url.pathname === "/v1/captures") {
