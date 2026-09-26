@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -29,6 +30,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -43,8 +45,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
@@ -99,23 +103,29 @@ private fun HopNoteApp(viewModel: CaptureViewModel) {
 private fun HopNoteScreen(viewModel: CaptureViewModel, onSettings: () -> Unit) {
     var text by remember { mutableStateOf("") }
     var voiceError by remember { mutableStateOf<String?>(null) }
-    var lastVoiceCapture by remember { mutableStateOf<Capture?>(null) }
+    var recentCapture by remember { mutableStateOf<Capture?>(null) }
     val context = LocalContext.current
-    val focusManager = LocalFocusManager.current
+    val focusRequester = remember { FocusRequester() }
+    val keyboard = LocalSoftwareKeyboardController.current
     val captures by viewModel.captures.collectAsStateWithLifecycle()
     val speech = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val spoken = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
         if (spoken.isNullOrBlank()) voiceError = "Je n'ai pas compris. Réessaie quand tu veux."
-        else viewModel.save(spoken, CaptureSource.VOICE) { lastVoiceCapture = it; voiceError = null }
+        else viewModel.save(spoken, CaptureSource.VOICE) { recentCapture = it; voiceError = null }
     }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) speech.launch(voiceIntent()) else voiceError = "L'accès au micro est nécessaire pour dicter."
     }
 
-    LaunchedEffect(lastVoiceCapture?.id) {
-        if (lastVoiceCapture != null) {
+    LaunchedEffect(Unit) {
+        focusRequester.requestFocus()
+        keyboard?.show()
+    }
+
+    LaunchedEffect(recentCapture?.id) {
+        if (recentCapture != null) {
             delay(5_000)
-            lastVoiceCapture = null
+            recentCapture = null
         }
     }
 
@@ -128,21 +138,21 @@ private fun HopNoteScreen(viewModel: CaptureViewModel, onSettings: () -> Unit) {
             Text("Une idée ? Garde-la.", style = MaterialTheme.typography.headlineSmall)
             Spacer(Modifier.height(12.dp))
             Row(Modifier.fillMaxWidth()) {
-                OutlinedTextField(value = text, onValueChange = { text = it }, modifier = Modifier.weight(1f), placeholder = { Text("Écrire une pensée…") }, minLines = 2, maxLines = 4)
+                OutlinedTextField(value = text, onValueChange = { text = it }, modifier = Modifier.weight(1f).focusRequester(focusRequester), placeholder = { Text("Écrire une pensée…") }, minLines = 2, maxLines = 4)
                 Spacer(Modifier.width(8.dp))
-                IconButton(onClick = {
+                FilledIconButton(modifier = Modifier.size(64.dp), onClick = {
                     if (context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) speech.launch(voiceIntent())
                     else permission.launch(Manifest.permission.RECORD_AUDIO)
                 }) { Icon(Icons.Default.Mic, "Dicter et enregistrer") }
             }
             voiceError?.let { Text(it, modifier = Modifier.padding(top = 8.dp), color = MaterialTheme.colorScheme.error) }
-            lastVoiceCapture?.let { capture ->
+            recentCapture?.let { capture ->
                 Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("Capturé", color = MaterialTheme.colorScheme.secondary)
-                    OutlinedButton(onClick = { viewModel.undo(capture); lastVoiceCapture = null }) { Text("Annuler") }
+                    OutlinedButton(onClick = { viewModel.undo(capture); recentCapture = null }) { Text("Annuler") }
                 }
             }
-            Button(onClick = { viewModel.save(text, CaptureSource.TEXT); text = ""; focusManager.clearFocus() }, modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp), enabled = text.trim().isNotEmpty()) {
+            Button(onClick = { viewModel.save(text, CaptureSource.TEXT) { recentCapture = it }; text = ""; focusRequester.requestFocus(); keyboard?.show() }, modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp), enabled = text.trim().isNotEmpty()) {
                 Icon(Icons.AutoMirrored.Filled.Send, null); Spacer(Modifier.width(8.dp)); Text("Garder")
             }
             Text("Mes captures", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
