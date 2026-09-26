@@ -38,6 +38,7 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -243,6 +244,7 @@ private fun SettingsScreen(viewModel: CaptureViewModel, theme: AppTheme, onTheme
     var notionError by remember { mutableStateOf<String?>(null) }
     var showCleanConfirmation by remember { mutableStateOf(false) }
     var cleanResult by remember { mutableStateOf<String?>(null) }
+    var disconnectTarget by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) { notionConnected = HopNoteApi.connected(notionSession) }
     val googleLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -256,10 +258,9 @@ private fun SettingsScreen(viewModel: CaptureViewModel, theme: AppTheme, onTheme
         )
         Column(Modifier.padding(horizontal = 20.dp, vertical = 12.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Connexions", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
-            ConnectionCard("Compte Google", googleEmail ?: "Compte de l’appareil", if (googleEmail != null) "Connecté" else "Connecter", googleEmail != null,
+            ConnectionCard("Compte Google", googleEmail ?: "Compte de l’appareil", if (googleEmail != null) "" else "Connecter", googleEmail != null,
                 secondaryAction = if (googleEmail != null) "Déconnecter" to {
-                    val options = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN).requestEmail().build()
-                    GoogleSignIn.getClient(context, options).signOut().addOnCompleteListener { google.clear(); googleEmail = null }
+                    disconnectTarget = "google"
                 } else null
             ) {
                 val options = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
@@ -268,13 +269,9 @@ private fun SettingsScreen(viewModel: CaptureViewModel, theme: AppTheme, onTheme
                     .build()
                 googleLauncher.launch(GoogleSignIn.getClient(context, options).signInIntent)
             }
-            ConnectionCard("Compte Notion", "Synchronisation vers HopNote", if (notionConnected) "Connecté" else "Connecter", notionConnected,
+            ConnectionCard("Compte Notion", "Synchronisation vers HopNote", if (notionConnected) "" else "Connecter", notionConnected,
                 secondaryAction = if (notionConnected) "Déconnecter" to {
-                    scope.launch {
-                        HopNoteApi.disconnect(notionSession)
-                            .onSuccess { notionSession.clear(); notionConnected = false; notionError = null }
-                            .onFailure { notionError = "Impossible de déconnecter Notion." }
-                    }
+                    disconnectTarget = "notion"
                 } else null,
                 onClick = onNotionSetup
             )
@@ -292,6 +289,30 @@ private fun SettingsScreen(viewModel: CaptureViewModel, theme: AppTheme, onTheme
             ConnectionCard("Crédits & Dons", "HopNote v0.2.0 · Créé par Arnaud Pouzols", "Voir", null, onClick = onCredits)
         }
     }
+    disconnectTarget?.let { target -> AlertDialog(
+        onDismissRequest = { disconnectTarget = null },
+        title = { Text("Déconnecter ${if (target == "google") "Google" else "Notion"} ?") },
+        text = { Text(if (target == "google") "Ce compte ne sera plus associé à HopNote sur ce téléphone." else "HopNote ne pourra plus synchroniser tes captures. La page Notion et les notes déjà envoyées resteront intactes.") },
+        confirmButton = {
+            Button(
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error, contentColor = MaterialTheme.colorScheme.onError),
+                onClick = {
+                    disconnectTarget = null
+                    if (target == "google") {
+                        val options = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN).requestEmail().build()
+                        GoogleSignIn.getClient(context, options).signOut().addOnCompleteListener { google.clear(); googleEmail = null }
+                    } else {
+                        scope.launch {
+                            HopNoteApi.disconnect(notionSession)
+                                .onSuccess { notionSession.clear(); notionConnected = false; notionError = null }
+                                .onFailure { notionError = "Impossible de déconnecter Notion." }
+                        }
+                    }
+                }
+            ) { Text("Déconnecter") }
+        },
+        dismissButton = { OutlinedButton(onClick = { disconnectTarget = null }) { Text("Annuler") } }
+    ) }
     if (showCleanConfirmation) AlertDialog(
         onDismissRequest = { showCleanConfirmation = false },
         title = { Text("Nettoyer les captures ?") },
@@ -354,7 +375,7 @@ private fun ConnectionCard(name: String, description: String, status: String, co
         Text(description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Row(Modifier.fillMaxWidth().padding(top = 5.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(status, color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
-            secondaryAction?.let { OutlinedButton(onClick = it.second) { Text(it.first) } }
+            secondaryAction?.let { Text(it.first, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.labelMedium, modifier = Modifier.clickable { it.second() }.padding(8.dp)) }
         }
     }
     connected?.let { Box(Modifier.align(Alignment.TopEnd).padding(12.dp).size(10.dp).background(if (it) androidx.compose.ui.graphics.Color(0xFF32D583) else MaterialTheme.colorScheme.error, androidx.compose.foundation.shape.CircleShape)) }
