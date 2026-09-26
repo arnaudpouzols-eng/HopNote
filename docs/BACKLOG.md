@@ -18,9 +18,9 @@ Principe directeur : **une idée arrive → HopNote la garde**. L'organisation n
 
 ## v0.2 — Copie Notion directe
 
-- [ ] Création guidée d'une intégration Notion personnelle
-- [ ] Stockage chiffré du jeton d'intégration sur l'appareil
-- [ ] Sélection d'une unique page « HopNote » autorisée dans Notion
+- [x] Création guidée d'une intégration Notion personnelle
+- [x] Stockage chiffré du jeton d'intégration sur l'appareil
+- [x] Choix d'une page parent autorisée et création automatique d'une page « HopNote »
 - [ ] Création idempotente d'un bloc par capture
 - [ ] File locale de synchronisation et reprise après échec réseau
 - [ ] État de synchro lisible dans Réglages, sans interrompre la capture

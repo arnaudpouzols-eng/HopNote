@@ -49,6 +49,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -56,6 +57,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -112,7 +114,9 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun HopNoteApp(viewModel: CaptureViewModel, theme: AppTheme, onThemeChange: (AppTheme) -> Unit) {
     var showSettings by remember { mutableStateOf(false) }
-    if (showSettings) SettingsScreen(theme, onThemeChange, onBack = { showSettings = false })
+    var showNotionSetup by remember { mutableStateOf(false) }
+    if (showNotionSetup) NotionSetupScreen(onBack = { showNotionSetup = false })
+    else if (showSettings) SettingsScreen(theme, onThemeChange, onNotionSetup = { showNotionSetup = true }, onBack = { showSettings = false })
     else HopNoteScreen(viewModel, onSettings = { showSettings = true })
 }
 
@@ -188,7 +192,7 @@ private fun HopNoteScreen(viewModel: CaptureViewModel, onSettings: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SettingsScreen(theme: AppTheme, onThemeChange: (AppTheme) -> Unit, onBack: () -> Unit) {
+private fun SettingsScreen(theme: AppTheme, onThemeChange: (AppTheme) -> Unit, onNotionSetup: () -> Unit, onBack: () -> Unit) {
     Column(Modifier.fillMaxSize().padding(top = 24.dp)) {
         TopAppBar(
             title = { Text("RÉGLAGES") },
@@ -199,7 +203,7 @@ private fun SettingsScreen(theme: AppTheme, onThemeChange: (AppTheme) -> Unit, o
             Text("Connexions", style = MaterialTheme.typography.headlineSmall)
             Text("La capture reste toujours locale et instantanée. Les connexions seront ajoutées sans modifier ce geste.")
             ConnectionCard("Compte Google", "Sauvegarde de tes captures", "Prévu en v0.2")
-            ConnectionCard("Notion", "Copie unidirectionnelle vers une page HopNote", "Prévu en v0.3")
+            ConnectionCard("Notion", "Copie unidirectionnelle vers une page HopNote", "Configurer", onNotionSetup)
             Spacer(Modifier.height(8.dp))
             Text("Thème", style = MaterialTheme.typography.headlineSmall)
             ThemeOption(AppTheme.ELECTRIC_BLUE, "Bleu électrique", "Le thème HopNote par défaut", theme, onThemeChange)
@@ -225,12 +229,71 @@ private fun ThemeOption(option: AppTheme, name: String, description: String, sel
 }
 
 @Composable
-private fun ConnectionCard(name: String, description: String, status: String) = Card(Modifier.fillMaxWidth()) {
+private fun ConnectionCard(name: String, description: String, status: String, onClick: (() -> Unit)? = null) = Card(
+    if (onClick == null) Modifier.fillMaxWidth() else Modifier.fillMaxWidth().clickable { onClick() }
+) {
     Column(Modifier.padding(16.dp)) {
         Text(name, style = MaterialTheme.typography.titleMedium)
         Text(description, style = MaterialTheme.typography.bodyMedium)
         Spacer(Modifier.height(8.dp))
         Text(status, color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.labelMedium)
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun NotionSetupScreen(onBack: () -> Unit) {
+    val context = LocalContext.current
+    val preferences = remember { NotionPreferences(context) }
+    val existing = remember { preferences.connection() }
+    var token by remember { mutableStateOf("") }
+    var pageUrl by remember { mutableStateOf("") }
+    var status by remember { mutableStateOf(existing?.let { "Connecté · page HopNote prête" }) }
+    var connecting by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    Column(Modifier.fillMaxSize().padding(top = 24.dp)) {
+        TopAppBar(
+            title = { Text("NOTION") },
+            navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Retour", tint = MaterialTheme.colorScheme.secondary) } },
+            colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
+        )
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Créer HopNote automatiquement", style = MaterialTheme.typography.headlineSmall)
+            Text("Crée une intégration Notion, partage-lui une page parente une seule fois, puis HopNote créera sa propre page à l'intérieur.")
+            OutlinedTextField(
+                value = token,
+                onValueChange = { token = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Jeton d'intégration Notion") },
+                visualTransformation = PasswordVisualTransformation(),
+                singleLine = true
+            )
+            OutlinedTextField(
+                value = pageUrl,
+                onValueChange = { pageUrl = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Lien de la page parente partagée") },
+                singleLine = true
+            )
+            Button(
+                enabled = token.isNotBlank() && pageIdFromUrl(pageUrl) != null && !connecting,
+                onClick = {
+                    val parentId = pageIdFromUrl(pageUrl) ?: return@Button
+                    connecting = true
+                    status = "Connexion à Notion…"
+                    scope.launch {
+                        NotionClient.createOrFindHopNotePage(token.trim(), parentId)
+                            .onSuccess { pageId -> preferences.save(token.trim(), parentId, pageId); status = "Connecté · page HopNote créée" }
+                            .onFailure { error -> status = error.message ?: "Connexion impossible" }
+                        connecting = false
+                    }
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) { Text(if (connecting) "Connexion…" else "Connecter et créer HopNote") }
+            status?.let { Text(it, color = MaterialTheme.colorScheme.secondary) }
+            existing?.let { OutlinedButton(onClick = { preferences.clear(); status = "Connexion supprimée" }, modifier = Modifier.fillMaxWidth()) { Text("Déconnecter Notion") } }
+        }
     }
 }
 

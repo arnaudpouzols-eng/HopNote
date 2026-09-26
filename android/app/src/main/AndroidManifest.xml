@@ -1,5 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.INTERNET" />
     <application android:allowBackup="true" android:icon="@drawable/ic_hopnote" android:label="HopNote" android:roundIcon="@drawable/ic_hopnote" android:theme="@style/Theme.HopNote">
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
