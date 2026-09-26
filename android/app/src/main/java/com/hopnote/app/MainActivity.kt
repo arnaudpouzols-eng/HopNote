@@ -12,6 +12,9 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -37,6 +40,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -89,14 +93,26 @@ class MainActivity : ComponentActivity() {
             override fun <T : ViewModel> create(modelClass: Class<T>) = CaptureViewModel(database.captures()) as T
         })[CaptureViewModel::class.java]
         enableEdgeToEdge()
-        setContent { HopNoteTheme { HopNoteApp(viewModel) } }
+        val preferences = getSharedPreferences("hopnote_preferences", MODE_PRIVATE)
+        val initialTheme = runCatching {
+            AppTheme.valueOf(preferences.getString("theme", AppTheme.ELECTRIC_BLUE.name)!!)
+        }.getOrDefault(AppTheme.ELECTRIC_BLUE)
+        setContent {
+            var theme by remember { mutableStateOf(initialTheme) }
+            HopNoteTheme(theme) {
+                HopNoteApp(viewModel, theme) { selected ->
+                    theme = selected
+                    preferences.edit().putString("theme", selected.name).apply()
+                }
+            }
+        }
     }
 }
 
 @Composable
-private fun HopNoteApp(viewModel: CaptureViewModel) {
+private fun HopNoteApp(viewModel: CaptureViewModel, theme: AppTheme, onThemeChange: (AppTheme) -> Unit) {
     var showSettings by remember { mutableStateOf(false) }
-    if (showSettings) SettingsScreen(onBack = { showSettings = false })
+    if (showSettings) SettingsScreen(theme, onThemeChange, onBack = { showSettings = false })
     else HopNoteScreen(viewModel, onSettings = { showSettings = true })
 }
 
@@ -172,7 +188,7 @@ private fun HopNoteScreen(viewModel: CaptureViewModel, onSettings: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SettingsScreen(onBack: () -> Unit) {
+private fun SettingsScreen(theme: AppTheme, onThemeChange: (AppTheme) -> Unit, onBack: () -> Unit) {
     Column(Modifier.fillMaxSize().padding(top = 24.dp)) {
         TopAppBar(
             title = { Text("RÉGLAGES") },
@@ -184,7 +200,27 @@ private fun SettingsScreen(onBack: () -> Unit) {
             Text("La capture reste toujours locale et instantanée. Les connexions seront ajoutées sans modifier ce geste.")
             ConnectionCard("Compte Google", "Sauvegarde de tes captures", "Prévu en v0.2")
             ConnectionCard("Notion", "Copie unidirectionnelle vers une page HopNote", "Prévu en v0.3")
+            Spacer(Modifier.height(8.dp))
+            Text("Thème", style = MaterialTheme.typography.headlineSmall)
+            ThemeOption(AppTheme.ELECTRIC_BLUE, "Bleu électrique", "Le thème HopNote par défaut", theme, onThemeChange)
+            ThemeOption(AppTheme.INDUSTRIAL_AMBER, "Ambre industriel", "Signal chaud et contrasté", theme, onThemeChange)
+            ThemeOption(AppTheme.LASER_RED, "Rouge laser", "Signal intense et direct", theme, onThemeChange)
         }
+    }
+}
+
+@Composable
+private fun ThemeOption(option: AppTheme, name: String, description: String, selectedTheme: AppTheme, onThemeChange: (AppTheme) -> Unit) = Card(
+    Modifier.fillMaxWidth().clickable { onThemeChange(option) }
+) {
+    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(18.dp).background(option.accentColor()))
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(name, style = MaterialTheme.typography.titleMedium)
+            Text(description, style = MaterialTheme.typography.bodyMedium)
+        }
+        RadioButton(selected = selectedTheme == option, onClick = { onThemeChange(option) })
     }
 }
 
