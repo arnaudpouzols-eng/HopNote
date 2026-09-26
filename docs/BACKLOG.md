@@ -16,20 +16,21 @@ Principe directeur : **une idée arrive → HopNote la garde**. L'organisation n
 - [ ] Gestion robuste des erreurs et permissions voix
 - [x] Vérification d'installation sur appareil Android réel
 
-## v0.2 — Compte et sauvegarde
+## v0.2 — Copie Notion directe
 
-- [ ] Authentification Google
-- [ ] Firebase / Firestore avec synchronisation des captures
-- [ ] File de synchronisation et résolution d'échecs réseau
-- [ ] Écran de statut de sauvegarde, sans interrompre la capture
+- [ ] Création guidée d'une intégration Notion personnelle
+- [ ] Stockage chiffré du jeton d'intégration sur l'appareil
+- [ ] Sélection d'une unique page « HopNote » autorisée dans Notion
+- [ ] Création idempotente d'un bloc par capture
+- [ ] File locale de synchronisation et reprise après échec réseau
+- [ ] État de synchro lisible dans Réglages, sans interrompre la capture
 
-## v0.3 — Web et Notion
+## v0.3 — Fiabilité de la copie
 
-- [ ] Interface Web Next.js déployée sur Vercel
-- [ ] Consultation du flux depuis le Web
-- [ ] Connexion Notion explicite
-- [ ] Synchronisation unidirectionnelle vers une unique page « HopNote »
-- [ ] Idempotence : aucune capture dupliquée dans Notion
+- [ ] Relance manuelle d'une synchronisation échouée
+- [ ] Indication du dernier envoi réussi
+- [ ] Diagnostic local des échecs sans exposer le contenu des captures
+- [ ] Tests offline / retour réseau / doublons
 
 ## v0.4 — Raccourcis Android
 
@@ -58,7 +59,13 @@ Principe directeur : **une idée arrive → HopNote la garde**. L'organisation n
 ## Pré-requis de publication v1.0
 
 - [ ] Tests de bout en bout sur appareils réels
-- [ ] Gestion des données, confidentialité et suppression de compte
-- [ ] Monitoring des échecs de synchronisation
+- [ ] Gestion des données, confidentialité et suppression des données locales
+- [ ] Journal local et lisible des échecs de synchronisation
 - [ ] Accessibilité et localisation
 - [ ] Politique de confidentialité, fiche Play Store et support
+
+## Après v1 — optionnel
+
+- [ ] Compte Google et sauvegarde multi-appareils
+- [ ] Firebase / Firestore si le besoin de restauration apparaît
+- [ ] Interface Web Next.js / Vercel si la consultation sur PC devient utile
