@@ -32,6 +32,7 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
@@ -131,9 +132,9 @@ class MainActivity : ComponentActivity() {
 private fun HopNoteApp(viewModel: CaptureViewModel, theme: AppTheme, onThemeChange: (AppTheme) -> Unit) {
     var showSettings by remember { mutableStateOf(false) }
     var showNotionSetup by remember { mutableStateOf(false) }
-    if (showNotionSetup) NotionSetupScreen(onConnected = { viewModel.retrySync() }, onBack = { showNotionSetup = false })
-    else if (showSettings) SettingsScreen(viewModel, theme, onThemeChange, onNotionSetup = { showNotionSetup = true }, onBack = { showSettings = false })
+    if (showSettings) SettingsScreen(viewModel, theme, onThemeChange, onNotionSetup = { showNotionSetup = true }, onBack = { showSettings = false })
     else HopNoteScreen(viewModel, onSettings = { showSettings = true })
+    if (showNotionSetup) NotionSetupDialog(onConnected = { viewModel.retrySync() }, onDismiss = { showNotionSetup = false })
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -262,7 +263,7 @@ private fun ConnectionCard(name: String, description: String, status: String, on
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun NotionSetupScreen(onConnected: () -> Unit, onBack: () -> Unit) {
+private fun NotionSetupDialog(onConnected: () -> Unit, onDismiss: () -> Unit) {
     val context = LocalContext.current
     val session = remember { HopNoteSession(context) }
     var status by remember { mutableStateOf<String?>(null) }
@@ -271,15 +272,12 @@ private fun NotionSetupScreen(onConnected: () -> Unit, onBack: () -> Unit) {
 
     LaunchedEffect(Unit) { if (HopNoteApi.connected(session)) status = "Connecté · page HopNote prête" }
 
-    Column(Modifier.fillMaxSize().padding(top = 24.dp)) {
-        TopAppBar(
-            title = { Text("NOTION") },
-            navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Retour", tint = MaterialTheme.colorScheme.secondary) } },
-            colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
-        )
-        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Connecter Notion", style = MaterialTheme.typography.headlineSmall)
-            Text("Autorise HopNote dans Notion. Une page HopNote privée sera créée automatiquement.")
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Connecter Notion") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Text("Une seule autorisation. HopNote crée ensuite sa page automatiquement.")
             Button(
                 enabled = !connecting,
                 onClick = {
@@ -300,8 +298,10 @@ private fun NotionSetupScreen(onConnected: () -> Unit, onBack: () -> Unit) {
                 }
             }, modifier = Modifier.fillMaxWidth()) { Text("J'ai autorisé HopNote") }
             status?.let { Text(it, color = MaterialTheme.colorScheme.secondary) }
-        }
-    }
+            }
+        },
+        confirmButton = { OutlinedButton(onClick = onDismiss) { Text("Fermer") } }
+    )
 }
 
 private fun voiceIntent() = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
