@@ -15,6 +15,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.ui.Alignment
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -253,38 +254,42 @@ private fun SettingsScreen(viewModel: CaptureViewModel, theme: AppTheme, onTheme
             navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Retour", tint = MaterialTheme.colorScheme.secondary) } },
             colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background)
         )
-        Column(Modifier.padding(20.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.padding(horizontal = 20.dp, vertical = 12.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Connexions", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
-            ConnectionCard("Compte Google", googleEmail ?: "Compte de l’appareil", if (googleEmail != null) "Connecté" else "Connecter", googleEmail != null) {
+            ConnectionCard("Compte Google", googleEmail ?: "Compte de l’appareil", if (googleEmail != null) "Connecté" else "Connecter", googleEmail != null,
+                secondaryAction = if (googleEmail != null) "Déconnecter" to {
+                    val options = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN).requestEmail().build()
+                    GoogleSignIn.getClient(context, options).signOut().addOnCompleteListener { google.clear(); googleEmail = null }
+                } else null
+            ) {
                 val options = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
                     .requestEmail()
                     .requestIdToken("921418049789-ier4iualalt27prl0mrutlasvu82ipfk.apps.googleusercontent.com")
                     .build()
                 googleLauncher.launch(GoogleSignIn.getClient(context, options).signInIntent)
             }
-            ConnectionCard("Compte Notion", "Synchronisation vers HopNote", if (notionConnected) "Connecté" else "Connecter", notionConnected, onNotionSetup)
-            if (notionConnected) OutlinedButton(
-                onClick = {
+            ConnectionCard("Compte Notion", "Synchronisation vers HopNote", if (notionConnected) "Connecté" else "Connecter", notionConnected,
+                secondaryAction = if (notionConnected) "Déconnecter" to {
                     scope.launch {
                         HopNoteApi.disconnect(notionSession)
                             .onSuccess { notionSession.clear(); notionConnected = false; notionError = null }
                             .onFailure { notionError = "Impossible de déconnecter Notion." }
                     }
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) { Text("Déconnecter Notion") }
+                } else null,
+                onClick = onNotionSetup
+            )
             notionError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-            Spacer(Modifier.height(8.dp))
             Text("Mémoire locale", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
-            Text("Nettoyage local uniquement. Les notes restent dans Notion.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Nettoyage local uniquement · Notion reste intact.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             OutlinedButton(onClick = { showCleanConfirmation = true }, modifier = Modifier.fillMaxWidth()) { Text("Nettoyer les notes synchronisées") }
             cleanResult?.let { Text(it, color = MaterialTheme.colorScheme.secondary) }
-            Spacer(Modifier.height(8.dp))
             Text("Thème", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
-            ThemeOption(AppTheme.ELECTRIC_BLUE, "Bleu électrique", "Le thème HopNote par défaut", theme, onThemeChange)
-            ThemeOption(AppTheme.INDUSTRIAL_AMBER, "Ambre industriel", "Signal chaud et contrasté", theme, onThemeChange)
-            ThemeOption(AppTheme.LASER_RED, "Rouge laser", "Signal intense et direct", theme, onThemeChange)
-            ConnectionCard("Crédits", "HopNote v0.2.0 · Créé par Arnaud Pouzols", "Voir", null, onCredits)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                ThemeOption(AppTheme.ELECTRIC_BLUE, "Bleu", theme, onThemeChange)
+                ThemeOption(AppTheme.INDUSTRIAL_AMBER, "Ambre", theme, onThemeChange)
+                ThemeOption(AppTheme.LASER_RED, "Rouge", theme, onThemeChange)
+            }
+            ConnectionCard("Crédits & Dons", "HopNote v0.2.0 · Créé par Arnaud Pouzols", "Voir", null, onClick = onCredits)
         }
     }
     if (showCleanConfirmation) AlertDialog(
@@ -327,32 +332,32 @@ private fun CreditsScreen(onBack: () -> Unit) {
 }
 
 @Composable
-private fun ThemeOption(option: AppTheme, name: String, description: String, selectedTheme: AppTheme, onThemeChange: (AppTheme) -> Unit) = Card(
-    Modifier.fillMaxWidth().clickable { onThemeChange(option) }
-) {
-    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(18.dp).background(option.accentColor()))
-        Spacer(Modifier.width(12.dp))
-        Column(Modifier.weight(1f)) {
-            Text(name, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
-            Text(description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        RadioButton(selected = selectedTheme == option, onClick = { onThemeChange(option) })
+private fun ThemeOption(option: AppTheme, name: String, selectedTheme: AppTheme, onThemeChange: (AppTheme) -> Unit) =
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.clickable { onThemeChange(option) }.padding(4.dp)) {
+        Box(
+            Modifier.size(42.dp)
+                .border(if (selectedTheme == option) 3.dp else 1.dp, if (selectedTheme == option) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outline, androidx.compose.foundation.shape.CircleShape)
+                .padding(4.dp)
+                .background(option.accentColor(), androidx.compose.foundation.shape.CircleShape),
+            contentAlignment = Alignment.Center
+        ) { if (selectedTheme == option) Text("✓", color = MaterialTheme.colorScheme.onPrimary, fontWeight = FontWeight.Bold) }
+        Text(name, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
-}
 
 @Composable
-private fun ConnectionCard(name: String, description: String, status: String, connected: Boolean? = null, onClick: (() -> Unit)? = null) = Card(
+private fun ConnectionCard(name: String, description: String, status: String, connected: Boolean? = null, secondaryAction: Pair<String, () -> Unit>? = null, onClick: (() -> Unit)? = null) = Card(
     if (onClick == null) Modifier.fillMaxWidth() else Modifier.fillMaxWidth().clickable { onClick() }
 ) {
     Box(Modifier.fillMaxWidth()) {
-    Column(Modifier.padding(16.dp)) {
+    Column(Modifier.padding(12.dp)) {
         Text(name, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurface)
         Text(description, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(8.dp))
-        Text(status, color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.labelMedium)
+        Row(Modifier.fillMaxWidth().padding(top = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(status, color = MaterialTheme.colorScheme.secondary, style = MaterialTheme.typography.labelMedium, modifier = Modifier.weight(1f))
+            secondaryAction?.let { OutlinedButton(onClick = it.second) { Text(it.first) } }
+        }
     }
-    connected?.let { Box(Modifier.align(Alignment.TopEnd).padding(14.dp).size(10.dp).background(if (it) androidx.compose.ui.graphics.Color(0xFF32D583) else MaterialTheme.colorScheme.error, androidx.compose.foundation.shape.CircleShape)) }
+    connected?.let { Box(Modifier.align(Alignment.TopEnd).padding(12.dp).size(10.dp).background(if (it) androidx.compose.ui.graphics.Color(0xFF32D583) else MaterialTheme.colorScheme.error, androidx.compose.foundation.shape.CircleShape)) }
     }
 }
 
