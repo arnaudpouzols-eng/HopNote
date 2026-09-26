@@ -6,18 +6,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
 private val HopNoteNight = darkColorScheme(
-    primary = Color(0xFF8CFFB4),
-    onPrimary = Color(0xFF062010),
-    secondary = Color(0xFF2BE4FF),
-    onSecondary = Color(0xFF001E24),
-    tertiary = Color(0xFFFF68DC),
-    background = Color(0xFF07110E),
-    onBackground = Color(0xFFE7FFF0),
-    surface = Color(0xFF101C18),
-    onSurface = Color(0xFFE7FFF0),
-    surfaceVariant = Color(0xFF1A2A24),
-    onSurfaceVariant = Color(0xFFB6CDC0),
-    outline = Color(0xFF4A7561),
+    primary = Color(0xFFB026FF),
+    onPrimary = Color(0xFFFFFFFF),
+    secondary = Color(0xFF19E6FF),
+    onSecondary = Color(0xFF001F25),
+    tertiary = Color(0xFFFF4FB8),
+    background = Color(0xFF090A12),
+    onBackground = Color(0xFFF6F1FF),
+    surface = Color(0xFF121421),
+    onSurface = Color(0xFFF6F1FF),
+    surfaceVariant = Color(0xFF1D2030),
+    onSurfaceVariant = Color(0xFFC8C5D6),
+    outline = Color(0xFF62637D),
     error = Color(0xFFFF8B8B)
 )
 
