@@ -33,7 +33,11 @@ Principe directeur : **une idée arrive → HopNote la garde**. L'organisation n
 
 ## v0.4 — Raccourcis Android
 
-- [ ] Widget de capture texte / voix
+- [ ] Widget Android minimal, placé sur l'écran d'accueil
+- [ ] Action « Texte » : ouvre HopNote directement dans le champ déjà actif
+- [ ] Action « Voix » : ouvre un parcours de dictée dédié et lance la capture après un seul appui
+- [ ] Retour de confirmation bref, puis retour automatique à l'écran précédent
+- [ ] Aucun flux, historique, catégorie ni réglage dans le widget
 - [ ] Raccourcis de lanceur
 - [ ] Partage Android « Envoyer vers HopNote »
 - [ ] Démarrage et sauvegarde mesurés pour préserver la rapidité
