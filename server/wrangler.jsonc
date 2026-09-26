@@ -2,6 +2,10 @@
   "name": "hopnote-api",
   "main": "src/index.ts",
   "compatibility_date": "2026-09-26",
+  "vars": {
+    "NOTION_CLIENT_ID": "3e7d872b-594c-816a-b3b0-0037b41bc821",
+    "PUBLIC_BASE_URL": "https://hopnote-api.arnaud-pouzols.workers.dev"
+  },
   "d1_databases": [
     { "binding": "DB", "database_name": "hopnote", "database_id": "ee306d6f-0e50-4ea0-a2dd-3d1a1c6187e4" }
   ]
