@@ -51,6 +51,9 @@ interface CaptureDao {
     @Query("DELETE FROM captures WHERE syncStatus = 'SYNCED' AND syncedAt < :before")
     suspend fun deleteSyncedBefore(before: Long): Int
 
+    @Query("DELETE FROM captures")
+    suspend fun deleteAll(): Int
+
     @Query("SELECT COUNT(*) FROM captures WHERE syncStatus != 'SYNCED'")
     fun pendingCount(): Flow<Int>
 }

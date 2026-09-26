@@ -41,6 +41,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
@@ -82,7 +83,7 @@ import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
 
-class CaptureViewModel(private val dao: CaptureDao, private val syncer: NotionSyncer) : ViewModel() {
+class CaptureViewModel(private val dao: CaptureDao, private val syncer: NotionSyncer, private val retention: LocalRetention) : ViewModel() {
     val captures = dao.observeAll().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     fun save(text: String, source: CaptureSource, onSaved: (Capture) -> Unit = {}) = viewModelScope.launch {
@@ -92,14 +93,18 @@ class CaptureViewModel(private val dao: CaptureDao, private val syncer: NotionSy
             dao.insert(capture)
             onSaved(capture)
             syncer.syncPending()
+            cleanAutomatically()
         }
     }
 
     fun undo(capture: Capture) = viewModelScope.launch { dao.deleteById(capture.id) }
-    fun cleanSynced(retentionDays: Int, onDone: (Int) -> Unit) = viewModelScope.launch {
-        onDone(dao.deleteSyncedBefore(System.currentTimeMillis() - retentionDays * 86_400_000L))
+    fun cleanAll(onDone: (Int) -> Unit) = viewModelScope.launch { onDone(dao.deleteAll()) }
+    fun retrySync() = viewModelScope.launch { syncer.syncPending(); cleanAutomatically() }
+    fun performAutomaticCleanup() = viewModelScope.launch { cleanAutomatically() }
+
+    private suspend fun cleanAutomatically() {
+        if (retention.automaticCleanupEnabled()) dao.deleteSyncedBefore(System.currentTimeMillis() - 14 * 86_400_000L)
     }
-    fun retrySync() = viewModelScope.launch { syncer.syncPending() }
 }
 
 class MainActivity : ComponentActivity() {
@@ -110,8 +115,9 @@ class MainActivity : ComponentActivity() {
             .build()
         val viewModel = ViewModelProvider(this, object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
-            override fun <T : ViewModel> create(modelClass: Class<T>) = CaptureViewModel(database.captures(), NotionSyncer(database.captures(), HopNoteSession(applicationContext))) as T
+            override fun <T : ViewModel> create(modelClass: Class<T>) = CaptureViewModel(database.captures(), NotionSyncer(database.captures(), HopNoteSession(applicationContext)), LocalRetention(applicationContext)) as T
         })[CaptureViewModel::class.java]
+        viewModel.performAutomaticCleanup()
         enableEdgeToEdge()
         val preferences = getSharedPreferences("hopnote_preferences", MODE_PRIVATE)
         val initialTheme = runCatching {
@@ -238,6 +244,7 @@ private fun HopNoteScreen(viewModel: CaptureViewModel, startVoice: Boolean, onSe
 private fun SettingsScreen(viewModel: CaptureViewModel, theme: AppTheme, onThemeChange: (AppTheme) -> Unit, onNotionSetup: () -> Unit, onCredits: () -> Unit, onBack: () -> Unit) {
     val context = LocalContext.current
     val google = remember { GoogleAccount(context) }
+    val retention = remember { LocalRetention(context) }
     var googleEmail by remember { mutableStateOf(google.email()) }
     val notionSession = remember { HopNoteSession(context) }
     var notionConnected by remember { mutableStateOf(false) }
@@ -245,6 +252,8 @@ private fun SettingsScreen(viewModel: CaptureViewModel, theme: AppTheme, onTheme
     var showCleanConfirmation by remember { mutableStateOf(false) }
     var cleanResult by remember { mutableStateOf<String?>(null) }
     var disconnectTarget by remember { mutableStateOf<String?>(null) }
+    var showRetentionHelp by remember { mutableStateOf(false) }
+    var automaticCleanup by remember { mutableStateOf(retention.automaticCleanupEnabled()) }
     val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) { notionConnected = HopNoteApi.connected(notionSession) }
     val googleLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -276,9 +285,16 @@ private fun SettingsScreen(viewModel: CaptureViewModel, theme: AppTheme, onTheme
                 onClick = onNotionSetup
             )
             notionError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-            Text("Mémoire locale", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
-            Text("Nettoyage local uniquement · Notion reste intact.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            OutlinedButton(onClick = { showCleanConfirmation = true }, modifier = Modifier.fillMaxWidth()) { Text("Nettoyer les notes synchronisées") }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Mémoire locale", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
+                Spacer(Modifier.width(8.dp))
+                Box(Modifier.size(20.dp).border(1.dp, MaterialTheme.colorScheme.outline, androidx.compose.foundation.shape.CircleShape).clickable { showRetentionHelp = true }, contentAlignment = Alignment.Center) { Text("?", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary) }
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(checked = automaticCleanup, onCheckedChange = { enabled -> automaticCleanup = enabled; retention.setAutomaticCleanupEnabled(enabled) })
+                Text("Suppression automatique après 14 jours", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+            }
+            OutlinedButton(onClick = { showCleanConfirmation = true }, modifier = Modifier.fillMaxWidth()) { Text("Vider les notes locales") }
             cleanResult?.let { Text(it, color = MaterialTheme.colorScheme.secondary) }
             Text("Thème", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
@@ -313,17 +329,23 @@ private fun SettingsScreen(viewModel: CaptureViewModel, theme: AppTheme, onTheme
         },
         dismissButton = { OutlinedButton(onClick = { disconnectTarget = null }) { Text("Annuler") } }
     ) }
+    if (showRetentionHelp) AlertDialog(
+        onDismissRequest = { showRetentionHelp = false },
+        title = { Text("Mémoire locale") },
+        text = { Text("Quand la suppression automatique est activée, HopNote supprime du téléphone les captures déjà synchronisées depuis plus de 14 jours. Cette vérification se fait à l’ouverture de l’app et après une synchronisation. Désactive-la pour conserver toutes tes captures locales. Le bouton « Vider les notes locales » supprime immédiatement tout le flux de l’app, mais jamais les notes déjà présentes dans Notion.") },
+        confirmButton = { Button(onClick = { showRetentionHelp = false }) { Text("Compris") } }
+    )
     if (showCleanConfirmation) AlertDialog(
         onDismissRequest = { showCleanConfirmation = false },
-        title = { Text("Nettoyer les captures ?") },
-        text = { Text("Les captures synchronisées depuis plus de 14 jours seront supprimées de ce téléphone. Elles resteront dans Notion.") },
+        title = { Text("Vider les notes locales ?") },
+        text = { Text("Toutes les captures présentes dans HopNote seront supprimées de ce téléphone, y compris celles qui ne sont pas encore synchronisées. Les notes déjà envoyées dans Notion resteront intactes.") },
         confirmButton = {
-            Button(onClick = {
+            Button(colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error, contentColor = MaterialTheme.colorScheme.onError), onClick = {
                 showCleanConfirmation = false
-                viewModel.cleanSynced(14) { count ->
-                    cleanResult = if (count == 0) "Aucune capture à nettoyer pour le moment." else "$count capture${if (count > 1) "s" else ""} supprimée${if (count > 1) "s" else ""} du téléphone."
+                viewModel.cleanAll { count ->
+                    cleanResult = if (count == 0) "Aucune note locale à vider." else "$count note${if (count > 1) "s" else ""} supprimée${if (count > 1) "s" else ""} du téléphone."
                 }
-            }) { Text("Nettoyer") }
+            }) { Text("Vider") }
         },
         dismissButton = { OutlinedButton(onClick = { showCleanConfirmation = false }) { Text("Annuler") } }
     )
