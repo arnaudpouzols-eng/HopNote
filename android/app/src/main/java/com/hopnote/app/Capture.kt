@@ -49,7 +49,7 @@ interface CaptureDao {
     suspend fun markFailed(id: String)
 
     @Query("DELETE FROM captures WHERE syncStatus = 'SYNCED' AND syncedAt < :before")
-    suspend fun deleteSyncedBefore(before: Long)
+    suspend fun deleteSyncedBefore(before: Long): Int
 
     @Query("SELECT COUNT(*) FROM captures WHERE syncStatus != 'SYNCED'")
     fun pendingCount(): Flow<Int>

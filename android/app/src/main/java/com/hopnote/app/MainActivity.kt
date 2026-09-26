@@ -94,7 +94,9 @@ class CaptureViewModel(private val dao: CaptureDao, private val syncer: NotionSy
     }
 
     fun undo(capture: Capture) = viewModelScope.launch { dao.deleteById(capture.id) }
-    fun cleanSynced(retentionDays: Int) = viewModelScope.launch { dao.deleteSyncedBefore(System.currentTimeMillis() - retentionDays * 86_400_000L) }
+    fun cleanSynced(retentionDays: Int, onDone: (Int) -> Unit) = viewModelScope.launch {
+        onDone(dao.deleteSyncedBefore(System.currentTimeMillis() - retentionDays * 86_400_000L))
+    }
     fun retrySync() = viewModelScope.launch { syncer.syncPending() }
 }
 
@@ -238,6 +240,8 @@ private fun SettingsScreen(viewModel: CaptureViewModel, theme: AppTheme, onTheme
     val notionSession = remember { HopNoteSession(context) }
     var notionConnected by remember { mutableStateOf(false) }
     var notionError by remember { mutableStateOf<String?>(null) }
+    var showCleanConfirmation by remember { mutableStateOf(false) }
+    var cleanResult by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) { notionConnected = HopNoteApi.connected(notionSession) }
     val googleLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -272,8 +276,9 @@ private fun SettingsScreen(viewModel: CaptureViewModel, theme: AppTheme, onTheme
             notionError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             Spacer(Modifier.height(8.dp))
             Text("Mémoire locale", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
-            Text("Nettoyage local uniquement.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            OutlinedButton(onClick = { viewModel.cleanSynced(14) }, modifier = Modifier.fillMaxWidth()) { Text("Nettoyer les notes synchronisées") }
+            Text("Nettoyage local uniquement. Les notes restent dans Notion.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            OutlinedButton(onClick = { showCleanConfirmation = true }, modifier = Modifier.fillMaxWidth()) { Text("Nettoyer les notes synchronisées") }
+            cleanResult?.let { Text(it, color = MaterialTheme.colorScheme.secondary) }
             Spacer(Modifier.height(8.dp))
             Text("Thème", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurface)
             ThemeOption(AppTheme.ELECTRIC_BLUE, "Bleu électrique", "Le thème HopNote par défaut", theme, onThemeChange)
@@ -282,6 +287,20 @@ private fun SettingsScreen(viewModel: CaptureViewModel, theme: AppTheme, onTheme
             ConnectionCard("Crédits", "HopNote v0.2.0 · Créé par Arnaud Pouzols", "Voir", null, onCredits)
         }
     }
+    if (showCleanConfirmation) AlertDialog(
+        onDismissRequest = { showCleanConfirmation = false },
+        title = { Text("Nettoyer les captures ?") },
+        text = { Text("Les captures synchronisées depuis plus de 14 jours seront supprimées de ce téléphone. Elles resteront dans Notion.") },
+        confirmButton = {
+            Button(onClick = {
+                showCleanConfirmation = false
+                viewModel.cleanSynced(14) { count ->
+                    cleanResult = if (count == 0) "Aucune capture à nettoyer pour le moment." else "$count capture${if (count > 1) "s" else ""} supprimée${if (count > 1) "s" else ""} du téléphone."
+                }
+            }) { Text("Nettoyer") }
+        },
+        dismissButton = { OutlinedButton(onClick = { showCleanConfirmation = false }) { Text("Annuler") } }
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
