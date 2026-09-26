@@ -64,6 +64,8 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import androidx.room.Room
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
@@ -71,7 +73,7 @@ import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
 
-class CaptureViewModel(private val dao: CaptureDao) : ViewModel() {
+class CaptureViewModel(private val dao: CaptureDao, private val syncer: NotionSyncer) : ViewModel() {
     val captures = dao.observeAll().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     fun save(text: String, source: CaptureSource, onSaved: (Capture) -> Unit = {}) = viewModelScope.launch {
@@ -80,19 +82,24 @@ class CaptureViewModel(private val dao: CaptureDao) : ViewModel() {
             val capture = Capture(text = cleaned, source = source)
             dao.insert(capture)
             onSaved(capture)
+            syncer.syncPending()
         }
     }
 
     fun undo(capture: Capture) = viewModelScope.launch { dao.deleteById(capture.id) }
+    fun cleanSynced(retentionDays: Int) = viewModelScope.launch { dao.deleteSyncedBefore(System.currentTimeMillis() - retentionDays * 86_400_000L) }
+    fun retrySync() = viewModelScope.launch { syncer.syncPending() }
 }
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val database = Room.databaseBuilder(applicationContext, HopNoteDatabase::class.java, "hopnote.db").build()
+        val database = Room.databaseBuilder(applicationContext, HopNoteDatabase::class.java, "hopnote.db")
+            .addMigrations(MIGRATION_1_2)
+            .build()
         val viewModel = ViewModelProvider(this, object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
-            override fun <T : ViewModel> create(modelClass: Class<T>) = CaptureViewModel(database.captures()) as T
+            override fun <T : ViewModel> create(modelClass: Class<T>) = CaptureViewModel(database.captures(), NotionSyncer(database.captures(), NotionPreferences(applicationContext))) as T
         })[CaptureViewModel::class.java]
         enableEdgeToEdge()
         val preferences = getSharedPreferences("hopnote_preferences", MODE_PRIVATE)
@@ -109,14 +116,23 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    private companion object {
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE captures ADD COLUMN syncedAt INTEGER")
+                database.execSQL("ALTER TABLE captures ADD COLUMN notionBlockId TEXT")
+            }
+        }
+    }
 }
 
 @Composable
 private fun HopNoteApp(viewModel: CaptureViewModel, theme: AppTheme, onThemeChange: (AppTheme) -> Unit) {
     var showSettings by remember { mutableStateOf(false) }
     var showNotionSetup by remember { mutableStateOf(false) }
-    if (showNotionSetup) NotionSetupScreen(onBack = { showNotionSetup = false })
-    else if (showSettings) SettingsScreen(theme, onThemeChange, onNotionSetup = { showNotionSetup = true }, onBack = { showSettings = false })
+    if (showNotionSetup) NotionSetupScreen(onConnected = { viewModel.retrySync() }, onBack = { showNotionSetup = false })
+    else if (showSettings) SettingsScreen(viewModel, theme, onThemeChange, onNotionSetup = { showNotionSetup = true }, onBack = { showSettings = false })
     else HopNoteScreen(viewModel, onSettings = { showSettings = true })
 }
 
@@ -192,7 +208,7 @@ private fun HopNoteScreen(viewModel: CaptureViewModel, onSettings: () -> Unit) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SettingsScreen(theme: AppTheme, onThemeChange: (AppTheme) -> Unit, onNotionSetup: () -> Unit, onBack: () -> Unit) {
+private fun SettingsScreen(viewModel: CaptureViewModel, theme: AppTheme, onThemeChange: (AppTheme) -> Unit, onNotionSetup: () -> Unit, onBack: () -> Unit) {
     Column(Modifier.fillMaxSize().padding(top = 24.dp)) {
         TopAppBar(
             title = { Text("RÉGLAGES") },
@@ -204,6 +220,10 @@ private fun SettingsScreen(theme: AppTheme, onThemeChange: (AppTheme) -> Unit, o
             Text("La capture reste toujours locale et instantanée. Les connexions seront ajoutées sans modifier ce geste.")
             ConnectionCard("Compte Google", "Sauvegarde de tes captures", "Prévu en v0.2")
             ConnectionCard("Notion", "Copie unidirectionnelle vers une page HopNote", "Configurer", onNotionSetup)
+            Spacer(Modifier.height(8.dp))
+            Text("Mémoire locale", style = MaterialTheme.typography.headlineSmall)
+            Text("Les notes synchronisées depuis plus de 14 jours peuvent être retirées du téléphone. Notion n'est jamais modifié.")
+            OutlinedButton(onClick = { viewModel.cleanSynced(14) }, modifier = Modifier.fillMaxWidth()) { Text("Nettoyer les notes synchronisées") }
             Spacer(Modifier.height(8.dp))
             Text("Thème", style = MaterialTheme.typography.headlineSmall)
             ThemeOption(AppTheme.ELECTRIC_BLUE, "Bleu électrique", "Le thème HopNote par défaut", theme, onThemeChange)
@@ -242,7 +262,7 @@ private fun ConnectionCard(name: String, description: String, status: String, on
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun NotionSetupScreen(onBack: () -> Unit) {
+private fun NotionSetupScreen(onConnected: () -> Unit, onBack: () -> Unit) {
     val context = LocalContext.current
     val preferences = remember { NotionPreferences(context) }
     val existing = remember { preferences.connection() }
@@ -284,7 +304,7 @@ private fun NotionSetupScreen(onBack: () -> Unit) {
                     status = "Connexion à Notion…"
                     scope.launch {
                         NotionClient.createOrFindHopNotePage(token.trim(), parentId)
-                            .onSuccess { pageId -> preferences.save(token.trim(), parentId, pageId); status = "Connecté · page HopNote créée" }
+                            .onSuccess { pageId -> preferences.save(token.trim(), parentId, pageId); onConnected(); status = "Connecté · page HopNote créée" }
                             .onFailure { error -> status = error.message ?: "Connexion impossible" }
                         connecting = false
                     }
@@ -308,6 +328,13 @@ private fun CaptureCard(capture: Capture) = Card(Modifier.fillMaxWidth()) {
         Text(capture.text, style = MaterialTheme.typography.bodyLarge)
         Spacer(Modifier.height(8.dp))
         val source = if (capture.source == CaptureSource.VOICE) "Voix" else "Texte"
-        Text("$source · ${DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(capture.createdAt))}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+        val state = when (capture.syncStatus) {
+            SyncStatus.SYNCED -> "✓ Notion · ${DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(capture.syncedAt!!))}"
+            SyncStatus.FAILED -> "Échec de synchro"
+            SyncStatus.SYNCING -> "Synchronisation…"
+            SyncStatus.LOCAL_ONLY -> "À synchroniser"
+        }
+        Text("$source · ${DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(capture.createdAt))}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(state, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
     }
 }

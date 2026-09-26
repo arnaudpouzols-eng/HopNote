@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.Flow
 import java.util.UUID
 
 enum class CaptureSource { TEXT, VOICE }
-enum class SyncStatus { LOCAL_ONLY }
+enum class SyncStatus { LOCAL_ONLY, SYNCING, SYNCED, FAILED }
 
 @Entity(tableName = "captures")
 data class Capture(
@@ -20,7 +20,9 @@ data class Capture(
     val text: String,
     val createdAt: Long = System.currentTimeMillis(),
     val source: CaptureSource,
-    val syncStatus: SyncStatus = SyncStatus.LOCAL_ONLY
+    val syncStatus: SyncStatus = SyncStatus.LOCAL_ONLY,
+    val syncedAt: Long? = null,
+    val notionBlockId: String? = null
 )
 
 @Dao
@@ -33,9 +35,27 @@ interface CaptureDao {
 
     @Query("DELETE FROM captures WHERE id = :id")
     suspend fun deleteById(id: String)
+
+    @Query("SELECT * FROM captures WHERE syncStatus != 'SYNCED' ORDER BY createdAt ASC")
+    suspend fun unsynced(): List<Capture>
+
+    @Query("UPDATE captures SET syncStatus = 'SYNCING' WHERE id = :id")
+    suspend fun markSyncing(id: String)
+
+    @Query("UPDATE captures SET syncStatus = 'SYNCED', syncedAt = :syncedAt, notionBlockId = :notionBlockId WHERE id = :id")
+    suspend fun markSynced(id: String, syncedAt: Long, notionBlockId: String)
+
+    @Query("UPDATE captures SET syncStatus = 'FAILED' WHERE id = :id")
+    suspend fun markFailed(id: String)
+
+    @Query("DELETE FROM captures WHERE syncStatus = 'SYNCED' AND syncedAt < :before")
+    suspend fun deleteSyncedBefore(before: Long)
+
+    @Query("SELECT COUNT(*) FROM captures WHERE syncStatus != 'SYNCED'")
+    fun pendingCount(): Flow<Int>
 }
 
-@Database(entities = [Capture::class], version = 1, exportSchema = false)
+@Database(entities = [Capture::class], version = 2, exportSchema = false)
 abstract class HopNoteDatabase : RoomDatabase() {
     abstract fun captures(): CaptureDao
 }

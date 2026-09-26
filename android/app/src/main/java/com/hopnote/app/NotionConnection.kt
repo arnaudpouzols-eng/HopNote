@@ -67,6 +67,23 @@ object NotionClient {
         return request("POST", "https://api.notion.com/v1/pages", token, body).getString("id")
     }
 
+    suspend fun appendCapture(connection: NotionConnection, capture: Capture): Result<String> = runCatching {
+        withContext(Dispatchers.IO) {
+            val richText = JSONArray().put(
+                JSONObject()
+                    .put("type", "text")
+                    .put("text", JSONObject().put("content", capture.text))
+            )
+            val paragraph = JSONObject()
+                .put("object", "block")
+                .put("type", "paragraph")
+                .put("paragraph", JSONObject().put("rich_text", richText))
+            val body = JSONObject().put("children", JSONArray().put(paragraph))
+            val response = request("PATCH", "https://api.notion.com/v1/blocks/${connection.hopNotePageId}/children", connection.token, body)
+            response.getJSONArray("results").getJSONObject(0).getString("id")
+        }
+    }
+
     private fun request(method: String, endpoint: String, token: String, body: JSONObject? = null): JSONObject {
         val connection = (URL(endpoint).openConnection() as HttpURLConnection).apply {
             requestMethod = method

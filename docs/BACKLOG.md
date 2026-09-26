@@ -21,9 +21,11 @@ Principe directeur : **une idée arrive → HopNote la garde**. L'organisation n
 - [x] Création guidée d'une intégration Notion personnelle
 - [x] Stockage chiffré du jeton d'intégration sur l'appareil
 - [x] Choix d'une page parent autorisée et création automatique d'une page « HopNote »
-- [ ] Création idempotente d'un bloc par capture
-- [ ] File locale de synchronisation et reprise après échec réseau
-- [ ] État de synchro lisible dans Réglages, sans interrompre la capture
+- [x] Envoi direct d'une capture vers la page HopNote
+- [x] État local par capture : à synchroniser, synchronisation, synchronisée, échec
+- [x] Date de synchronisation et nettoyage local sans effet sur Notion
+- [ ] Idempotence renforcée lors d'une coupure réseau pendant l'envoi
+- [ ] Reprise automatique en arrière-plan après échec réseau
 
 ## v0.3 — Fiabilité de la copie
 
