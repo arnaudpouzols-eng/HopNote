@@ -7,14 +7,14 @@ plugins {
 
 android {
     namespace = "com.hopnote.app"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.hopnote.app"
         minSdk = 26
-        targetSdk = 35
-        versionCode = 20
-        versionName = "0.2.0"
+        targetSdk = 36
+        versionCode = 100
+        versionName = "1.0.0"
     }
 
     compileOptions {

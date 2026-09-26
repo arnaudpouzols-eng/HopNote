@@ -274,7 +274,6 @@ private fun SettingsScreen(viewModel: CaptureViewModel, theme: AppTheme, onTheme
             ) {
                 val options = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
                     .requestEmail()
-                    .requestIdToken("921418049789-ier4iualalt27prl0mrutlasvu82ipfk.apps.googleusercontent.com")
                     .build()
                 googleLauncher.launch(GoogleSignIn.getClient(context, options).signInIntent)
             }

@@ -21,6 +21,8 @@ const securityHeaders = {
 const json = (data: unknown, status = 200) =>
   new Response(JSON.stringify(data), { status, headers: { ...securityHeaders, "Content-Type": "application/json" } })
 
+const html = (body: string) => new Response(body, { headers: { ...securityHeaders, "Content-Type": "text/html; charset=UTF-8" } })
+
 const random = () => crypto.randomUUID().replaceAll("-", "") + crypto.randomUUID().replaceAll("-", "")
 
 async function sha256(value: string) {
@@ -92,6 +94,7 @@ async function notionRequest(accessToken: string, path: string, init: RequestIni
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url)
+    if (request.method === "GET" && url.pathname === "/privacy") return html(`<!doctype html><html lang="fr"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Confidentialité — HopNote</title><body style="margin:0;background:#090a12;color:#f6f1ff;font:16px/1.55 system-ui,sans-serif"><main style="max-width:720px;margin:auto;padding:40px 24px"><h1>Politique de confidentialité — HopNote</h1><p>Dernière mise à jour : 26 septembre 2026</p><h2>Principe</h2><p>HopNote sert à capturer rapidement des pensées. L’application ne contient ni publicité ni traçage publicitaire et ne vend aucune donnée personnelle.</p><h2>Données traitées</h2><p>Les captures (texte, date, heure et source texte ou voix) sont enregistrées localement sur le téléphone. Si tu choisis de connecter Notion, ces captures sont envoyées à Notion afin d’être ajoutées à ta page HopNote. Le jeton Notion est chiffré sur le serveur HopNote, hébergé chez Cloudflare, uniquement pour réaliser cette synchronisation.</p><p>La connexion Google est facultative. L’adresse e-mail choisie reste chiffrée sur le téléphone et n’est pas envoyée au serveur HopNote.</p><h2>Contrôle et suppression</h2><p>Tu peux vider les notes locales depuis Réglages &gt; Mémoire locale. Tu peux aussi déconnecter Notion depuis Réglages ; le jeton associé est alors supprimé du serveur. Les notes déjà créées dans Notion restent dans ton espace Notion et peuvent y être supprimées directement.</p><h2>Services tiers</h2><p>Notion traite les données synchronisées selon sa propre politique de confidentialité. Le lien de soutien Tipeee est facultatif et ouvre le site Tipeee, qui applique sa propre politique.</p><h2>Contact</h2><p>Pour toute question : <a style="color:#78a2ff" href="mailto:arnaud.pouzols@gmail.com">arnaud.pouzols@gmail.com</a>.</p></main></body></html>`)
     if (request.method === "GET" && url.pathname === "/health") return json({ ok: true })
 
     if (request.method === "POST" && url.pathname === "/v1/devices") {
