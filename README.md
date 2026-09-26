@@ -4,13 +4,15 @@
 
 HopNote est une application Android pensée pour enregistrer une pensée en quelques secondes : on écrit ou on parle, et la capture reste disponible hors ligne dans un flux chronologique unique.
 
-## État actuel — v0.1.0
+## État actuel — v0.1.1
 
 - Capture de texte à lancement immédiat
 - Capture vocale native (lorsqu'un service de reconnaissance est disponible)
+- Enregistrement vocal automatique, avec annulation pendant cinq secondes
 - Stockage local offline avec Room
 - Flux chronologique unique
 - Métadonnées limitées : identifiant, texte, date/heure, source, état de synchro
+- Réglages préparant les futures connexions Google et Notion
 
 Il n'y a volontairement ni catégorie, ni projet, ni tag, ni priorité, ni distinction note/tâche.
 
@@ -25,4 +27,3 @@ La reconnaissance vocale dépend des services installés sur l'appareil. La capt
 ## Versions
 
 La stratégie de versions et le backlog sont dans [docs/VERSIONS.md](docs/VERSIONS.md) et [docs/BACKLOG.md](docs/BACKLOG.md).
-

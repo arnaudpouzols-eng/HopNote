@@ -7,12 +7,14 @@ Principe directeur : **une idée arrive → HopNote la garde**. L'organisation n
 - [x] Projet Android Kotlin / Jetpack Compose
 - [x] Saisie texte au lancement
 - [x] Dictée vocale native
+- [x] Dictée enregistrée automatiquement avec annulation courte
 - [x] Base Room offline
 - [x] Flux chronologique unique
 - [x] Modèle minimal : `id`, `text`, `createdAt`, `source`, `syncStatus`
+- [x] Écran Réglages préparant Google et Notion
 - [ ] Tests unitaires du dépôt et tests d'interface de capture
 - [ ] Gestion robuste des erreurs et permissions voix
-- [ ] Vérification sur appareil Android réel
+- [x] Vérification d'installation sur appareil Android réel
 
 ## v0.2 — Compte et sauvegarde
 
@@ -56,4 +58,3 @@ Principe directeur : **une idée arrive → HopNote la garde**. L'organisation n
 - [ ] Monitoring des échecs de synchronisation
 - [ ] Accessibilité et localisation
 - [ ] Politique de confidentialité, fiche Play Store et support
-

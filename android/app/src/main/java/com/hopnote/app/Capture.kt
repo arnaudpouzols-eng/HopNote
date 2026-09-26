@@ -30,10 +30,12 @@ interface CaptureDao {
 
     @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(capture: Capture)
+
+    @Query("DELETE FROM captures WHERE id = :id")
+    suspend fun deleteById(id: String)
 }
 
 @Database(entities = [Capture::class], version = 1, exportSchema = false)
 abstract class HopNoteDatabase : RoomDatabase() {
     abstract fun captures(): CaptureDao
 }
-
