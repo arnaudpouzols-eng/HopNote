@@ -126,7 +126,12 @@ class MainActivity : ComponentActivity() {
         setContent {
             var theme by remember { mutableStateOf(initialTheme) }
             HopNoteTheme(theme) {
-                HopNoteApp(viewModel, theme, intent.getBooleanExtra(START_VOICE, false)) { selected ->
+                HopNoteApp(
+                    viewModel = viewModel,
+                    theme = theme,
+                    startVoice = intent.getBooleanExtra(START_VOICE, false),
+                    assistantCapture = intent.noteText()
+                ) { selected ->
                     theme = selected
                     preferences.edit().putString("theme", selected.name).apply()
                 }
@@ -143,26 +148,39 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        recreate()
+    }
 }
 
 @Composable
-private fun HopNoteApp(viewModel: CaptureViewModel, theme: AppTheme, startVoice: Boolean, onThemeChange: (AppTheme) -> Unit) {
+private fun HopNoteApp(
+    viewModel: CaptureViewModel,
+    theme: AppTheme,
+    startVoice: Boolean,
+    assistantCapture: String?,
+    onThemeChange: (AppTheme) -> Unit
+) {
     var showSettings by remember { mutableStateOf(false) }
     var showNotionSetup by remember { mutableStateOf(false) }
     var showCredits by remember { mutableStateOf(false) }
     if (showCredits) CreditsScreen(onBack = { showCredits = false })
     else if (showSettings) SettingsScreen(viewModel, theme, onThemeChange, onNotionSetup = { showNotionSetup = true }, onCredits = { showCredits = true }, onBack = { showSettings = false })
-    else HopNoteScreen(viewModel, startVoice, onSettings = { showSettings = true })
+    else HopNoteScreen(viewModel, startVoice, assistantCapture, onSettings = { showSettings = true })
     if (showNotionSetup) NotionSetupDialog(onConnected = { viewModel.retrySync() }, onDismiss = { showNotionSetup = false })
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun HopNoteScreen(viewModel: CaptureViewModel, startVoice: Boolean, onSettings: () -> Unit) {
+private fun HopNoteScreen(viewModel: CaptureViewModel, startVoice: Boolean, assistantCapture: String?, onSettings: () -> Unit) {
     var text by remember { mutableStateOf("") }
     var voiceError by remember { mutableStateOf<String?>(null) }
     var recentCapture by remember { mutableStateOf<Capture?>(null) }
     var scrollToCaptureId by remember { mutableStateOf<String?>(null) }
+    var pendingAssistantCapture by remember(assistantCapture) { mutableStateOf(assistantCapture) }
     val context = LocalContext.current
     val serverSession = remember { HopNoteSession(context) }
     var notionReady by remember { mutableStateOf(false) }
@@ -237,6 +255,32 @@ private fun HopNoteScreen(viewModel: CaptureViewModel, startVoice: Boolean, onSe
             items(captures, key = { it.id }) { CaptureCard(it) }
         }
     }
+
+    pendingAssistantCapture?.let { capture ->
+        AlertDialog(
+            onDismissRequest = { pendingAssistantCapture = null },
+            title = { Text("Garder cette pensée ?") },
+            text = { Text(capture) },
+            dismissButton = { OutlinedButton(onClick = { pendingAssistantCapture = null }) { Text("Annuler") } },
+            confirmButton = {
+                Button(onClick = {
+                    viewModel.save(capture, CaptureSource.VOICE) { saved ->
+                        recentCapture = saved
+                        scrollToCaptureId = saved.id
+                    }
+                    pendingAssistantCapture = null
+                }) { Text("Garder") }
+            }
+        )
+    }
+}
+
+private fun Intent.noteText(): String? {
+    val isCreateNote = action == "com.google.android.gms.actions.CREATE_NOTE" || action == "android.intent.action.CREATE_NOTE"
+    if (!isCreateNote) return null
+    return getStringExtra(Intent.EXTRA_TEXT)
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

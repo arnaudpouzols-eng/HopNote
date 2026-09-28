@@ -8,6 +8,18 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <!-- Google Assistant / Voice Actions: "créer une note dans HopNote". -->
+            <intent-filter>
+                <action android:name="com.google.android.gms.actions.CREATE_NOTE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+            <!-- Android's native note creation action (Android 14 and later). -->
+            <intent-filter>
+                <action android:name="android.intent.action.CREATE_NOTE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
         </activity>
     </application>
 </manifest>
