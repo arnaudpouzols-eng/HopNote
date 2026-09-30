@@ -86,7 +86,7 @@ import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
 
-class CaptureViewModel(private val dao: CaptureDao, private val syncer: NotionSyncer, private val retention: LocalRetention) : ViewModel() {
+class CaptureViewModel(private val context: Context, private val dao: CaptureDao, private val retention: LocalRetention) : ViewModel() {
     val captures = dao.observeAll().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     fun save(text: String, source: CaptureSource, onSaved: (Capture) -> Unit = {}) = viewModelScope.launch {
@@ -95,14 +95,14 @@ class CaptureViewModel(private val dao: CaptureDao, private val syncer: NotionSy
             val capture = Capture(text = cleaned, source = source)
             dao.insert(capture)
             onSaved(capture)
-            syncer.syncPending()
+            CaptureSyncQueue.enqueue(context)
             cleanAutomatically()
         }
     }
 
     fun undo(capture: Capture) = viewModelScope.launch { dao.deleteById(capture.id) }
     fun cleanAll(onDone: (Int) -> Unit) = viewModelScope.launch { onDone(dao.deleteAll()) }
-    fun retrySync() = viewModelScope.launch { syncer.syncPending(); cleanAutomatically() }
+    fun retrySync() = viewModelScope.launch { CaptureSyncQueue.enqueue(context); cleanAutomatically() }
     fun performAutomaticCleanup() = viewModelScope.launch { cleanAutomatically() }
 
     private suspend fun cleanAutomatically() {
@@ -118,9 +118,10 @@ class MainActivity : ComponentActivity() {
             .build()
         val viewModel = ViewModelProvider(this, object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
-            override fun <T : ViewModel> create(modelClass: Class<T>) = CaptureViewModel(database.captures(), NotionSyncer(database.captures(), HopNoteSession(applicationContext)), LocalRetention(applicationContext)) as T
+            override fun <T : ViewModel> create(modelClass: Class<T>) = CaptureViewModel(applicationContext, database.captures(), LocalRetention(applicationContext)) as T
         })[CaptureViewModel::class.java]
         viewModel.performAutomaticCleanup()
+        CaptureSyncQueue.enqueue(applicationContext)
         enableEdgeToEdge()
         val preferences = getSharedPreferences("hopnote_preferences", MODE_PRIVATE)
         val initialTheme = runCatching {

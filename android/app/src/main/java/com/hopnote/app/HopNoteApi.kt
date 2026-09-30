@@ -19,6 +19,7 @@ class HopNoteSession(context: Context) {
 
 object HopNoteApi {
     private const val BASE = "https://hopnote-api.arnaud-pouzols.workers.dev"
+    private const val NETWORK_TIMEOUT_MS = 15_000
 
     suspend fun authorizationUrl(session: HopNoteSession): Result<String> = runCatching {
         val token = session.token() ?: createSession().also(session::save)
@@ -35,19 +36,47 @@ object HopNoteApi {
             val connection = (URL("$BASE/v1/notion").openConnection() as HttpURLConnection).apply {
                 requestMethod = "DELETE"
                 setRequestProperty("Authorization", "Bearer $token")
+                connectTimeout = NETWORK_TIMEOUT_MS
+                readTimeout = NETWORK_TIMEOUT_MS
             }
-            if (connection.responseCode !in 200..299) error("Déconnexion impossible")
+            try {
+                if (connection.responseCode !in 200..299) error("Déconnexion impossible")
+            } finally {
+                connection.disconnect()
+            }
         }
     }
     private suspend fun createSession() = withContext(Dispatchers.IO) {
-        val c = (URL("$BASE/v1/devices").openConnection() as HttpURLConnection).apply { requestMethod = "POST" }
-        JSONObject(c.inputStream.bufferedReader().use { it.readText() }).getString("sessionToken")
+        val c = (URL("$BASE/v1/devices").openConnection() as HttpURLConnection).apply {
+            requestMethod = "POST"
+            connectTimeout = NETWORK_TIMEOUT_MS
+            readTimeout = NETWORK_TIMEOUT_MS
+        }
+        try {
+            JSONObject(c.inputStream.bufferedReader().use { it.readText() }).getString("sessionToken")
+        } finally {
+            c.disconnect()
+        }
     }
     private suspend fun request(method: String, path: String, token: String, payload: JSONObject? = null) = withContext(Dispatchers.IO) {
-        val c = (URL("$BASE$path").openConnection() as HttpURLConnection).apply { requestMethod = method; setRequestProperty("Authorization", "Bearer $token"); setRequestProperty("Content-Type", "application/json"); if (payload != null) { doOutput = true; outputStream.bufferedWriter().use { it.write(payload.toString()) } } }
-        val code = c.responseCode
-        val body = (if (code in 200..299) c.inputStream else c.errorStream).bufferedReader().use { it.readText() }
-        if (code !in 200..299) throw IllegalStateException("Connexion HopNote impossible")
-        JSONObject(body)
+        val c = (URL("$BASE$path").openConnection() as HttpURLConnection).apply {
+            requestMethod = method
+            connectTimeout = NETWORK_TIMEOUT_MS
+            readTimeout = NETWORK_TIMEOUT_MS
+            setRequestProperty("Authorization", "Bearer $token")
+            setRequestProperty("Content-Type", "application/json")
+            if (payload != null) {
+                doOutput = true
+                outputStream.bufferedWriter().use { it.write(payload.toString()) }
+            }
+        }
+        try {
+            val code = c.responseCode
+            val body = (if (code in 200..299) c.inputStream else c.errorStream).bufferedReader().use { it.readText() }
+            if (code !in 200..299) throw IllegalStateException("Connexion HopNote impossible")
+            JSONObject(body)
+        } finally {
+            c.disconnect()
+        }
     }
 }
