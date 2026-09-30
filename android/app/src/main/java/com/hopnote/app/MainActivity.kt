@@ -1,8 +1,11 @@
 package com.hopnote.app
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Bundle
 import android.speech.RecognizerIntent
 import com.google.android.gms.auth.api.signin.GoogleSignIn
@@ -190,11 +193,17 @@ private fun HopNoteScreen(viewModel: CaptureViewModel, startVoice: Boolean, assi
     val captureListState = rememberLazyListState()
     val speech = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         val spoken = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
-        if (spoken.isNullOrBlank()) voiceError = "Je n'ai pas compris. Réessaie quand tu veux."
+        if (spoken.isNullOrBlank()) {
+            voiceError = if (context.hasNetwork()) {
+                "Je n'ai pas compris. Réessaie quand tu veux."
+            } else {
+                "La dictée hors connexion n'est pas disponible. Télécharge le pack de langue française dans les réglages de saisie vocale du téléphone."
+            }
+        }
         else viewModel.save(spoken, CaptureSource.VOICE) { recentCapture = it; scrollToCaptureId = it.id; voiceError = null }
     }
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) speech.launch(voiceIntent()) else voiceError = "L'accès au micro est nécessaire pour dicter."
+        if (granted) speech.launch(voiceIntent(context)) else voiceError = "L'accès au micro est nécessaire pour dicter."
     }
 
     LaunchedEffect(Unit) {
@@ -202,7 +211,7 @@ private fun HopNoteScreen(viewModel: CaptureViewModel, startVoice: Boolean, assi
         focusRequester.requestFocus()
         keyboard?.show()
     }
-    LaunchedEffect(startVoice) { if (startVoice && context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) speech.launch(voiceIntent()) }
+    LaunchedEffect(startVoice) { if (startVoice && context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) speech.launch(voiceIntent(context)) }
 
     LaunchedEffect(recentCapture?.id) {
         if (recentCapture != null) {
@@ -234,7 +243,7 @@ private fun HopNoteScreen(viewModel: CaptureViewModel, startVoice: Boolean, assi
                 OutlinedTextField(value = text, onValueChange = { text = it }, modifier = Modifier.weight(1f).focusRequester(focusRequester), placeholder = { Text("Écrire une pensée…") }, minLines = 2, maxLines = 4)
                 Spacer(Modifier.width(8.dp))
                 FilledIconButton(modifier = Modifier.size(64.dp), onClick = {
-                    if (context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) speech.launch(voiceIntent())
+                    if (context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) speech.launch(voiceIntent(context))
                     else permission.launch(Manifest.permission.RECORD_AUDIO)
                 }) { Icon(Icons.Default.Mic, "Dicter et enregistrer", tint = MaterialTheme.colorScheme.onPrimary) }
             }
@@ -497,9 +506,17 @@ private fun NotionSetupDialog(onConnected: () -> Unit, onDismiss: () -> Unit) {
     )
 }
 
-private fun voiceIntent() = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+private fun voiceIntent(context: Context) = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
     putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
     putExtra(RecognizerIntent.EXTRA_PROMPT, "Dictez votre pensée")
+    // Android can fall back to a local language pack when the phone has no network.
+    putExtra(RecognizerIntent.EXTRA_PREFER_OFFLINE, !context.hasNetwork())
+}
+
+private fun Context.hasNetwork(): Boolean {
+    val manager = getSystemService(ConnectivityManager::class.java) ?: return false
+    val network = manager.activeNetwork ?: return false
+    return manager.getNetworkCapabilities(network)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true
 }
 
 @Composable
