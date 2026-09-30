@@ -2,7 +2,7 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <application android:allowBackup="false" android:usesCleartextTraffic="false" android:icon="@drawable/ic_hopnote" android:label="HopNote" android:roundIcon="@drawable/ic_hopnote" android:theme="@style/Theme.HopNote">
+    <application android:allowBackup="false" android:dataExtractionRules="@xml/data_extraction_rules" android:fullBackupContent="@xml/backup_rules" android:usesCleartextTraffic="false" android:icon="@drawable/ic_hopnote" android:label="HopNote" android:roundIcon="@drawable/ic_hopnote" android:theme="@style/Theme.HopNote">
         <receiver android:name=".CaptureWidgetProvider" android:exported="true" android:label="Capture vocale HopNote"><intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter><meta-data android:name="android.appwidget.provider" android:resource="@xml/capture_widget_info" /></receiver>
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>

@@ -86,7 +86,8 @@ import kotlinx.coroutines.launch
 import java.text.DateFormat
 import java.util.Date
 
-class CaptureViewModel(private val context: Context, private val dao: CaptureDao, private val retention: LocalRetention) : ViewModel() {
+class CaptureViewModel(context: Context, private val dao: CaptureDao, private val retention: LocalRetention) : ViewModel() {
+    private val appContext = context.applicationContext
     val captures = dao.observeAll().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     fun save(text: String, source: CaptureSource, onSaved: (Capture) -> Unit = {}) = viewModelScope.launch {
@@ -95,14 +96,14 @@ class CaptureViewModel(private val context: Context, private val dao: CaptureDao
             val capture = Capture(text = cleaned, source = source)
             dao.insert(capture)
             onSaved(capture)
-            CaptureSyncQueue.enqueue(context)
+            CaptureSyncQueue.enqueue(appContext)
             cleanAutomatically()
         }
     }
 
     fun undo(capture: Capture) = viewModelScope.launch { dao.deleteById(capture.id) }
     fun cleanAll(onDone: (Int) -> Unit) = viewModelScope.launch { onDone(dao.deleteAll()) }
-    fun retrySync() = viewModelScope.launch { CaptureSyncQueue.enqueue(context); cleanAutomatically() }
+    fun retrySync() = viewModelScope.launch { CaptureSyncQueue.enqueue(appContext); cleanAutomatically() }
     fun performAutomaticCleanup() = viewModelScope.launch { cleanAutomatically() }
 
     private suspend fun cleanAutomatically() {
