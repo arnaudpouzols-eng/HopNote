@@ -550,7 +550,7 @@ private fun CaptureCard(capture: Capture) = Card(Modifier.fillMaxWidth()) {
         val source = if (capture.source == CaptureSource.VOICE) "Voix" else "Texte"
         val state = when (capture.syncStatus) {
             SyncStatus.SYNCED -> "✓ Notion · ${DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(capture.syncedAt!!))}"
-            SyncStatus.FAILED -> "Échec de synchro"
+            SyncStatus.FAILED -> "À synchroniser"
             SyncStatus.SYNCING -> "Synchronisation…"
             SyncStatus.LOCAL_ONLY -> "À synchroniser"
         }

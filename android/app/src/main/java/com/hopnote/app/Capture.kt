@@ -45,8 +45,12 @@ interface CaptureDao {
     @Query("UPDATE captures SET syncStatus = 'SYNCED', syncedAt = :syncedAt, notionBlockId = :notionBlockId WHERE id = :id")
     suspend fun markSynced(id: String, syncedAt: Long, notionBlockId: String)
 
-    @Query("UPDATE captures SET syncStatus = 'FAILED' WHERE id = :id")
-    suspend fun markFailed(id: String)
+    @Query("UPDATE captures SET syncStatus = 'LOCAL_ONLY' WHERE id = :id")
+    suspend fun markPending(id: String)
+
+    /** A stopped worker must never leave a note visually stuck on “Synchronisation…”. */
+    @Query("UPDATE captures SET syncStatus = 'LOCAL_ONLY' WHERE syncStatus != 'SYNCED'")
+    suspend fun resetPendingForRetry()
 
     @Query("DELETE FROM captures WHERE syncStatus = 'SYNCED' AND syncedAt < :before")
     suspend fun deleteSyncedBefore(before: Long): Int
