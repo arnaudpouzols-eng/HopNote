@@ -60,6 +60,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -112,8 +113,11 @@ class CaptureViewModel(context: Context, private val dao: CaptureDao, private va
 }
 
 class MainActivity : ComponentActivity() {
+    private var notionCallbackRevision by mutableIntStateOf(0)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (intent.isNotionConnectedCallback()) notionCallbackRevision++
         val database = Room.databaseBuilder(applicationContext, HopNoteDatabase::class.java, "hopnote.db")
             .addMigrations(MIGRATION_1_2)
             .build()
@@ -135,7 +139,8 @@ class MainActivity : ComponentActivity() {
                     viewModel = viewModel,
                     theme = theme,
                     startVoice = intent.getBooleanExtra(START_VOICE, false),
-                    assistantCapture = intent.noteText()
+                    assistantCapture = intent.noteText(),
+                    notionCallbackRevision = notionCallbackRevision
                 ) { selected ->
                     theme = selected
                     preferences.edit().putString("theme", selected.name).apply()
@@ -157,9 +162,15 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        recreate()
+        if (intent.isNotionConnectedCallback()) {
+            notionCallbackRevision++
+            CaptureSyncQueue.enqueue(applicationContext)
+        } else recreate()
     }
 }
+
+private fun Intent.isNotionConnectedCallback() =
+    action == Intent.ACTION_VIEW && data?.scheme == "hopnote" && data?.host == "notion" && data?.path == "/connected"
 
 @Composable
 private fun HopNoteApp(
@@ -167,15 +178,23 @@ private fun HopNoteApp(
     theme: AppTheme,
     startVoice: Boolean,
     assistantCapture: String?,
+    notionCallbackRevision: Int,
     onThemeChange: (AppTheme) -> Unit
 ) {
     var showSettings by remember { mutableStateOf(false) }
     var showNotionSetup by remember { mutableStateOf(false) }
     var showCredits by remember { mutableStateOf(false) }
+    var notionConnectionRevision by remember { mutableIntStateOf(0) }
+    LaunchedEffect(notionCallbackRevision) {
+        if (notionCallbackRevision > 0) {
+            showSettings = true
+            showNotionSetup = true
+        }
+    }
     if (showCredits) CreditsScreen(onBack = { showCredits = false })
-    else if (showSettings) SettingsScreen(viewModel, theme, onThemeChange, onNotionSetup = { showNotionSetup = true }, onCredits = { showCredits = true }, onBack = { showSettings = false })
+    else if (showSettings) SettingsScreen(viewModel, theme, onThemeChange, notionConnectionRevision, onNotionSetup = { showNotionSetup = true }, onCredits = { showCredits = true }, onBack = { showSettings = false })
     else HopNoteScreen(viewModel, startVoice, assistantCapture, onSettings = { showSettings = true })
-    if (showNotionSetup) NotionSetupDialog(onConnected = { viewModel.retrySync() }, onDismiss = { showNotionSetup = false })
+    if (showNotionSetup) NotionSetupDialog(onConnected = { viewModel.retrySync(); notionConnectionRevision++ }, onDismiss = { showNotionSetup = false })
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -296,7 +315,7 @@ private fun Intent.noteText(): String? {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SettingsScreen(viewModel: CaptureViewModel, theme: AppTheme, onThemeChange: (AppTheme) -> Unit, onNotionSetup: () -> Unit, onCredits: () -> Unit, onBack: () -> Unit) {
+private fun SettingsScreen(viewModel: CaptureViewModel, theme: AppTheme, onThemeChange: (AppTheme) -> Unit, notionConnectionRevision: Int, onNotionSetup: () -> Unit, onCredits: () -> Unit, onBack: () -> Unit) {
     val context = LocalContext.current
     val google = remember { GoogleAccount(context) }
     val retention = remember { LocalRetention(context) }
@@ -310,7 +329,7 @@ private fun SettingsScreen(viewModel: CaptureViewModel, theme: AppTheme, onTheme
     var showRetentionHelp by remember { mutableStateOf(false) }
     var automaticCleanup by remember { mutableStateOf(retention.automaticCleanupEnabled()) }
     val scope = rememberCoroutineScope()
-    LaunchedEffect(Unit) { notionConnected = HopNoteApi.connected(notionSession) }
+    LaunchedEffect(notionConnectionRevision) { notionConnected = HopNoteApi.connected(notionSession) }
     val googleLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         GoogleSignIn.getSignedInAccountFromIntent(result.data).result?.email?.let { google.save(it); googleEmail = it }
     }
@@ -474,14 +493,21 @@ private fun NotionSetupDialog(onConnected: () -> Unit, onDismiss: () -> Unit) {
     var connecting by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
 
-    LaunchedEffect(Unit) { if (HopNoteApi.connected(session)) status = "Connecté · page HopNote prête" }
+    LaunchedEffect(Unit) {
+        if (HopNoteApi.connected(session)) {
+            status = "Connecté · page HopNote prête"
+            onConnected()
+            delay(900)
+            onDismiss()
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Connecter Notion") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text("Une seule autorisation. HopNote crée ensuite sa page automatiquement.")
+            Text("Choisis ton espace Notion — pas une page. HopNote crée sa page automatiquement, puis revient ici.")
             Button(
                 enabled = !connecting,
                 onClick = {
@@ -489,18 +515,13 @@ private fun NotionSetupDialog(onConnected: () -> Unit, onDismiss: () -> Unit) {
                     status = "Ouverture de Notion…"
                     scope.launch {
                         HopNoteApi.authorizationUrl(session)
-                            .onSuccess { url -> context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))); status = "Autorise HopNote dans Notion, puis reviens ici." }
+                            .onSuccess { url -> context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))); status = "Autorise HopNote dans Notion : le retour dans l’app est automatique." }
                             .onFailure { error -> status = error.message ?: "Connexion impossible" }
                         connecting = false
                     }
                 },
                 modifier = Modifier.fillMaxWidth()
             ) { Text(if (connecting) "Connexion…" else "Connecter Notion") }
-            OutlinedButton(onClick = {
-                scope.launch {
-                    status = if (HopNoteApi.connected(session)) { onConnected(); "Connecté · page HopNote prête" } else "Autorisation en attente. Termine-la dans Notion."
-                }
-            }, modifier = Modifier.fillMaxWidth()) { Text("J'ai autorisé HopNote") }
             status?.let { Text(it, color = MaterialTheme.colorScheme.secondary) }
             }
         },

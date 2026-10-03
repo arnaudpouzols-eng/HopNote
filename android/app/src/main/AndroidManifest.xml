@@ -21,6 +21,13 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="*/*" />
             </intent-filter>
+            <!-- Retour automatique après l'autorisation Notion. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="hopnote" android:host="notion" android:path="/connected" />
+            </intent-filter>
         </activity>
     </application>
 </manifest>
