@@ -375,7 +375,7 @@ private fun SettingsScreen(viewModel: CaptureViewModel, theme: AppTheme, onTheme
                 ThemeOption(AppTheme.INDUSTRIAL_AMBER, "Ambre", theme, onThemeChange)
                 ThemeOption(AppTheme.LASER_RED, "Rouge", theme, onThemeChange)
             }
-            ConnectionCard("Crédits & Dons", "HopNote v0.2.0 · Créé par Arnaud Pouzols", "Voir", null, onClick = onCredits)
+            ConnectionCard("Crédits & Dons", "HopNote v1.0.1 · Créé par Arnaud Pouzols", "Voir", null, onClick = onCredits)
         }
     }
     disconnectTarget?.let { target -> AlertDialog(
@@ -432,7 +432,7 @@ private fun CreditsScreen(onBack: () -> Unit) {
         TopAppBar(title = { Text("CRÉDITS") }, navigationIcon = { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Retour") } }, colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background))
         Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("HopNote", style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onSurface)
-            Text("Version 0.2.0", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Version 1.0.1", color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text("Créé par Arnaud Pouzols", color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(12.dp))
             Text("Si HopNote vous est utile et que vous souhaitez soutenir son développement, vous pouvez laisser un pourboire libre.", color = MaterialTheme.colorScheme.onSurface)
